@@ -84,10 +84,9 @@ fun ProjectsScreen(onOpenProject: (Long) -> Unit) {
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             horizontalArrangement = Arrangement.Start,
         ) {
-            ExtendedFloatingActionButton(
-                text = { Text("پروژه جدید") },
-                onClick = { showCreate = true },
-            )
+            ExtendedFloatingActionButton(onClick = { showCreate = true }) {
+                Text("پروژه جدید")
+            }
         }
     }
 

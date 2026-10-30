@@ -101,12 +101,13 @@ fun WeeklyLogScreen() {
         }
 
         ExtendedFloatingActionButton(
-            text = { Text("تسک جدید") },
             onClick = { showAdd = true },
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(16.dp),
-        )
+        ) {
+            Text("تسک جدید")
+        }
     }
 
     if (showAdd) {

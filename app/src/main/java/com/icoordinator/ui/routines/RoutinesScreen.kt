@@ -3,6 +3,7 @@ package com.icoordinator.ui.routines
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -82,12 +83,13 @@ fun RoutinesScreen() {
         }
 
         ExtendedFloatingActionButton(
-            text = { Text("روتین جدید") },
             onClick = { showAdd = true },
             modifier = Modifier
                 .align(Alignment.BottomStart)
                 .padding(16.dp),
-        )
+        ) {
+            Text("روتین جدید")
+        }
     }
 
     if (showAdd) {
@@ -101,6 +103,7 @@ fun RoutinesScreen() {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AddRoutineDialog(
     onDismiss: () -> Unit,
