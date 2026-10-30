@@ -62,7 +62,7 @@ fun AppNavHost() {
                             selected = current == item.route,
                             onClick = {
                                 navController.navigate(item.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+				    popUpTo(navController.graph.startDestinationId) { saveState = true }
                                     launchSingleTop = true
                                     restoreState = true
                                 }
