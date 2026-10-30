@@ -1,0 +1,47 @@
+package com.icoordinator.ui.routines
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.icoordinator.data.RoutineRepository
+import com.icoordinator.data.entity.RoutineEntity
+import com.icoordinator.domain.WeekUtils
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import java.time.DayOfWeek
+
+class RoutinesViewModel(private val repo: RoutineRepository) : ViewModel() {
+
+    val routines: StateFlow<List<RoutineEntity>> = repo.observeRoutines()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error.asStateFlow()
+
+    /** برمی‌گرداند: true اگر روتین ثبت شد. */
+    fun addRoutine(title: String, days: Set<DayOfWeek>, timeText: String): Boolean {
+        if (title.isBlank()) {
+            _error.value = "عنوان روتین را وارد کن"
+            return false
+        }
+        if (days.isEmpty()) {
+            _error.value = "حداقل یک روز از هفته را انتخاب کن"
+            return false
+        }
+        val time = WeekUtils.parseTime(timeText)
+        if (time == null) {
+            _error.value = "ساعت را به‌صورت HH:mm وارد کن، مثلاً 07:30"
+            return false
+        }
+        _error.value = null
+        viewModelScope.launch { repo.addRoutine(title, days, time) }
+        return true
+    }
+
+    fun deleteRoutine(routine: RoutineEntity) {
+        viewModelScope.launch { repo.deleteRoutine(routine) }
+    }
+}
