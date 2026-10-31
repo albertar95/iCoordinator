@@ -6,6 +6,8 @@ import com.icoordinator.data.ProjectRepository
 import com.icoordinator.data.TaskRepository
 import com.icoordinator.data.entity.ProjectEntity
 import com.icoordinator.data.entity.TaskEntity
+import com.icoordinator.domain.PersianCalendar
+import com.icoordinator.domain.RepeatType
 import com.icoordinator.domain.WeekUtils
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,7 +18,6 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
-import java.time.LocalDateTime
 
 class WeeklyLogViewModel(
     private val tasks: TaskRepository,
@@ -41,8 +42,16 @@ class WeeklyLogViewModel(
         _weekStart.value = _weekStart.value.plusWeeks(weeks)
     }
 
-    /** برمی‌گرداند: true اگر تسک ثبت شد. */
-    fun addTask(title: String, day: LocalDate, timeText: String, projectId: Long?): Boolean {
+    /** برمی‌گرداند: true اگر تسک (یا تکرارهایش) ثبت شد. */
+    fun addTask(
+        title: String,
+        day: LocalDate,
+        timeText: String,
+        projectId: Long?,
+        repeat: RepeatType,
+        untilText: String,
+        alarmOffset: Int?,
+    ): Boolean {
         if (title.isBlank()) {
             _error.value = "عنوان تسک را وارد کن"
             return false
@@ -52,9 +61,19 @@ class WeeklyLogViewModel(
             _error.value = "ساعت را به‌صورت HH:mm وارد کن، مثلاً 09:30"
             return false
         }
+        val until: LocalDate? = if (repeat == RepeatType.NONE) {
+            null
+        } else {
+            val parsed = PersianCalendar.parse(untilText)
+            if (parsed == null || parsed.isBefore(day)) {
+                _error.value = "تاریخ پایان تکرار را به شکل ۱۴۰۵/۰۸/۱۰ و بعد از تاریخ شروع وارد کن"
+                return false
+            }
+            parsed
+        }
         _error.value = null
         viewModelScope.launch {
-            tasks.addTask(title, LocalDateTime.of(day, time), projectId)
+            tasks.addTasks(title, day, time, projectId, repeat, until, alarmOffset)
         }
         return true
     }

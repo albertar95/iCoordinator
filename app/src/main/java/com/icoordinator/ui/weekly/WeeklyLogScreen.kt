@@ -5,9 +5,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
@@ -36,6 +37,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.icoordinator.ICoordinatorApp
 import com.icoordinator.data.entity.ProjectEntity
 import com.icoordinator.data.entity.TaskEntity
+import com.icoordinator.domain.ALARM_OPTIONS
+import com.icoordinator.domain.AlarmOption
+import com.icoordinator.domain.PersianCalendar
+import com.icoordinator.domain.RepeatType
 import com.icoordinator.domain.WeekUtils
 import java.time.LocalDate
 
@@ -50,6 +55,7 @@ fun WeeklyLogScreen() {
     val weekStart by vm.weekStart.collectAsStateWithLifecycle()
     val tasks by vm.tasksOfWeek.collectAsStateWithLifecycle()
     val projects by vm.projectList.collectAsStateWithLifecycle()
+    val error by vm.error.collectAsStateWithLifecycle()
     var showAdd by remember { mutableStateOf(false) }
 
     val projectNames = projects.associate { it.id to it.title }
@@ -70,7 +76,7 @@ fun WeeklyLogScreen() {
                 ) {
                     TextButton(onClick = { vm.shiftWeek(-1) }) { Text("هفته قبل") }
                     Text(
-                        "${weekStart.format(WeekUtils.DATE_FMT)} تا ${weekEnd.format(WeekUtils.DATE_FMT)}",
+                        "${WeekUtils.dateText(weekStart)} تا ${WeekUtils.dateText(weekEnd)}",
                         style = MaterialTheme.typography.titleSmall,
                     )
                     TextButton(onClick = { vm.shiftWeek(1) }) { Text("هفته بعد") }
@@ -78,10 +84,13 @@ fun WeeklyLogScreen() {
             }
 
             item {
-                Text(
-                    "انجام‌شده: $doneCount از ${tasks.size}",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "انجام‌شده: $doneCount از ${tasks.size}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(12.dp),
+                    )
+                }
             }
 
             if (tasks.isEmpty()) {
@@ -97,13 +106,13 @@ fun WeeklyLogScreen() {
                 )
             }
 
-            item { Spacer(Modifier.height(72.dp)) }
+            item { Spacer(Modifier.height(88.dp)) }
         }
 
         ExtendedFloatingActionButton(
             onClick = { showAdd = true },
             modifier = Modifier
-                .align(Alignment.BottomStart)
+                .align(Alignment.BottomEnd)
                 .padding(16.dp),
         ) {
             Text("تسک جدید")
@@ -114,11 +123,14 @@ fun WeeklyLogScreen() {
         AddTaskDialog(
             weekStart = weekStart,
             projects = projects,
-            onDismiss = { showAdd = false },
-            onSave = { title, day, time, projectId ->
-                if (vm.addTask(title, day, time, projectId)) showAdd = false
+            errorText = error,
+            onDismiss = {
+                vm.clearError()
+                showAdd = false
             },
-            errorText = vm.error.collectAsStateWithLifecycle().value,
+            onSave = { title, day, time, projectId, repeat, until, alarm ->
+                if (vm.addTask(title, day, time, projectId, repeat, until, alarm)) showAdd = false
+            },
         )
     }
 }
@@ -131,9 +143,10 @@ private fun TaskRow(
     onDelete: () -> Unit,
 ) {
     val due = WeekUtils.toLocalDateTime(task.dueAt)
-    val dueLabel = "${WeekUtils.persianDayName(due.dayOfWeek)} " +
-        "${due.toLocalDate().format(WeekUtils.DATE_FMT)} - ${due.format(WeekUtils.TIME_FMT)}"
-    val suffix = projectName?.let { " | $it" } ?: ""
+    val alarmText = task.alarmOffsetMinutes?.let { " | آلارم" } ?: ""
+    val dueLabel = "${WeekUtils.persianDayName(due.dayOfWeek)} ${WeekUtils.dateText(due.toLocalDate())} - " +
+        due.format(WeekUtils.TIME_FMT)
+    val suffix = (projectName?.let { " | $it" } ?: "") + alarmText
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -156,14 +169,17 @@ private fun TaskRow(
 private fun AddTaskDialog(
     weekStart: LocalDate,
     projects: List<ProjectEntity>,
-    onDismiss: () -> Unit,
-    onSave: (String, LocalDate, String, Long?) -> Unit,
     errorText: String?,
+    onDismiss: () -> Unit,
+    onSave: (String, LocalDate, String, Long?, RepeatType, String, Int?) -> Unit,
 ) {
     var title by remember { mutableStateOf("") }
     var day by remember { mutableStateOf(weekStart) }
     var time by remember { mutableStateOf("09:00") }
     var projectId by remember { mutableStateOf<Long?>(null) }
+    var repeat by remember { mutableStateOf(RepeatType.NONE) }
+    var untilText by remember { mutableStateOf("") }
+    var alarm: AlarmOption by remember { mutableStateOf(ALARM_OPTIONS[0]) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -177,16 +193,18 @@ private fun AddTaskDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
+
                 Text("روز", style = MaterialTheme.typography.bodySmall)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(WeekUtils.weekDays(weekStart)) { d ->
                         FilterChip(
                             selected = d == day,
                             onClick = { day = d },
-                            label = { Text(WeekUtils.persianDayName(d.dayOfWeek)) },
+                            label = { Text("${WeekUtils.persianDayName(d.dayOfWeek)} ${PersianCalendar.toJalali(d).day}") },
                         )
                     }
                 }
+
                 OutlinedTextField(
                     value = time,
                     onValueChange = { time = it },
@@ -194,6 +212,38 @@ private fun AddTaskDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
+
+                Text("تکرار", style = MaterialTheme.typography.bodySmall)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(RepeatType.values().toList()) { type ->
+                        FilterChip(
+                            selected = repeat == type,
+                            onClick = { repeat = type },
+                            label = { Text(type.label) },
+                        )
+                    }
+                }
+                if (repeat != RepeatType.NONE) {
+                    OutlinedTextField(
+                        value = untilText,
+                        onValueChange = { untilText = it },
+                        label = { Text("پایان تکرار (مثل ۱۴۰۵/۰۸/۱۰)") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+
+                Text("آلارم", style = MaterialTheme.typography.bodySmall)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(ALARM_OPTIONS) { option ->
+                        FilterChip(
+                            selected = alarm == option,
+                            onClick = { alarm = option },
+                            label = { Text(option.label) },
+                        )
+                    }
+                }
+
                 Text("پروژه (اختیاری)", style = MaterialTheme.typography.bodySmall)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     item {
@@ -211,11 +261,14 @@ private fun AddTaskDialog(
                         )
                     }
                 }
+
                 errorText?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             }
         },
         confirmButton = {
-            Button(onClick = { onSave(title, day, time, projectId) }) { Text("ذخیره") }
+            Button(onClick = { onSave(title, day, time, projectId, repeat, untilText, alarm.offsetMinutes) }) {
+                Text("ذخیره")
+            }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("انصراف") }

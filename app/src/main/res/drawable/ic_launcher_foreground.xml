@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- لوگوی iCoordinator: تقویم سفید با علامت تیک، روی زمینه‌ی آبی -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- بدنه‌ی تقویم -->
+    <path
+        android:fillColor="@color/ic_launcher_foreground"
+        android:pathData="M30,34 L78,34 C81.3,34 84,36.7 84,40 L84,76 C84,79.3 81.3,82 78,82 L30,82 C26.7,82 24,79.3 24,76 L24,40 C24,36.7 26.7,34 30,34 Z" />
+
+    <!-- حلقه‌های بالای تقویم -->
+    <path
+        android:fillColor="@color/ic_launcher_foreground"
+        android:pathData="M38,26 L44,26 L44,38 L38,38 Z" />
+    <path
+        android:fillColor="@color/ic_launcher_foreground"
+        android:pathData="M64,26 L70,26 L70,38 L64,38 Z" />
+
+    <!-- خط جداکننده‌ی هدر (با رنگ زمینه) -->
+    <path
+        android:fillColor="@color/ic_launcher_background"
+        android:pathData="M24,50 L84,50 L84,53 L24,53 Z" />
+
+    <!-- تیک -->
+    <path
+        android:fillColor="@color/ic_launcher_background"
+        android:pathData="M40,66 L47,73 L68,52 L72,56 L47,81 L36,70 Z" />
+</vector>

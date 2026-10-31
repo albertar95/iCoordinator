@@ -2,10 +2,14 @@ package com.icoordinator.ui.projects
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -38,7 +42,7 @@ fun ProjectsScreen(onOpenProject: (Long) -> Unit) {
     val projects by vm.projects.collectAsStateWithLifecycle()
     var showCreate by remember { mutableStateOf(false) }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize()) {
         if (projects.isEmpty()) {
             Column(
                 modifier = Modifier.fillMaxSize().padding(24.dp),
@@ -46,12 +50,13 @@ fun ProjectsScreen(onOpenProject: (Long) -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text("هنوز پروژه‌ای نداری", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(4.dp))
                 Text("با دکمه‌ی «پروژه جدید» شروع کن", style = MaterialTheme.typography.bodyMedium)
             }
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+                contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 items(projects, key = { it.project.id }) { summary ->
@@ -62,12 +67,12 @@ fun ProjectsScreen(onOpenProject: (Long) -> Unit) {
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(summary.project.title, style = MaterialTheme.typography.titleMedium)
-                            Spacer8()
+                            Spacer(Modifier.height(8.dp))
                             LinearProgressIndicator(
                                 progress = { summary.progress / 100f },
                                 modifier = Modifier.fillMaxWidth(),
                             )
-                            Spacer8()
+                            Spacer(Modifier.height(4.dp))
                             Text("پیشرفت: ${summary.progress}٪", style = MaterialTheme.typography.bodySmall)
                             Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
                                 TextButton(onClick = { vm.deleteProject(summary.project) }) {
@@ -77,16 +82,17 @@ fun ProjectsScreen(onOpenProject: (Long) -> Unit) {
                         }
                     }
                 }
+                item { Spacer(Modifier.height(88.dp)) }
             }
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            horizontalArrangement = Arrangement.Start,
+        ExtendedFloatingActionButton(
+            onClick = { showCreate = true },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(16.dp),
         ) {
-            ExtendedFloatingActionButton(onClick = { showCreate = true }) {
-                Text("پروژه جدید")
-            }
+            Text("پروژه جدید")
         }
     }
 
@@ -100,9 +106,6 @@ fun ProjectsScreen(onOpenProject: (Long) -> Unit) {
         )
     }
 }
-
-@Composable
-private fun Spacer8() = androidx.compose.foundation.layout.Spacer(Modifier.padding(4.dp))
 
 @Composable
 private fun CreateProjectDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {

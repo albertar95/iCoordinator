@@ -13,8 +13,10 @@ import java.time.temporal.TemporalAdjusters
 /** ابزارهای تاریخ و هفته. هفته‌ی کاری از شنبه شروع می‌شود. */
 object WeekUtils {
 
-    val DATE_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy/MM/dd")
     val TIME_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+
+    /** تاریخ شمسی برای نمایش، مثل ۱۴۰۵/۰۸/۱۰ */
+    fun dateText(date: LocalDate): String = PersianCalendar.format(date)
 
     fun weekStartOf(date: LocalDate): LocalDate =
         date.with(TemporalAdjusters.previousOrSame(DayOfWeek.SATURDAY))

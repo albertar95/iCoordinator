@@ -4,9 +4,10 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 
 /**
- * روتین: کاری که در روزهای مشخص هفته تکرار می‌شود.
- * daysMask: بیت i (از ۰) یعنی روز DayOfWeek با value = i+1 (دوشنبه = بیت ۰ ... یکشنبه = بیت ۶)
+ * روتین: کاری که در روزهای مشخص هفته بین startDay و endDay تکرار می‌شود.
+ * daysMask: بیت i (از ۰) یعنی روزی با DayOfWeek.value = i+1
  * timeOfDay: ساعت به قالب HH:mm
+ * startDay / endDay: epochDay. endDay = null یعنی بدون پایان.
  */
 @Entity(tableName = "routines")
 data class RoutineEntity(
@@ -14,5 +15,7 @@ data class RoutineEntity(
     val title: String,
     val daysMask: Int,
     val timeOfDay: String,
+    val startDay: Long,
+    val endDay: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
 )

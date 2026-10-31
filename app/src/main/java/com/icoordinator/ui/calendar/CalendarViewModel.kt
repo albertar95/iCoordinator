@@ -7,6 +7,7 @@ import com.icoordinator.data.TaskRepository
 import com.icoordinator.data.entity.RoutineCompletionEntity
 import com.icoordinator.data.entity.RoutineEntity
 import com.icoordinator.data.entity.TaskEntity
+import com.icoordinator.domain.PersianCalendar
 import com.icoordinator.domain.WeekUtils
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,9 +19,11 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
-import java.time.YearMonth
 
-/** یک آیتم در تقویم؛ یا تسک است یا نمونه‌ای از یک روتین در یک روز. */
+/** ماه شمسی */
+data class JMonth(val year: Int, val month: Int)
+
+/** یک آیتم در تقویم؛ یا تسک است یا نمونه‌ای از روتین در یک روز. */
 data class DayEntry(
     val key: String,
     val title: String,
@@ -36,18 +39,21 @@ class CalendarViewModel(
     private val routines: RoutineRepository,
 ) : ViewModel() {
 
-    private val _month = MutableStateFlow(YearMonth.now())
-    val month: StateFlow<YearMonth> = _month.asStateFlow()
+    private val _month = MutableStateFlow(
+        PersianCalendar.toJalali(LocalDate.now()).let { JMonth(it.year, it.month) },
+    )
+    val month: StateFlow<JMonth> = _month.asStateFlow()
 
     private val _selected = MutableStateFlow(LocalDate.now())
     val selected: StateFlow<LocalDate> = _selected.asStateFlow()
 
-    /** همه‌ی آیتم‌های ماه (تسک‌ها + روتین‌ها) گروه‌بندی‌شده بر اساس روز */
+    /** همه‌ی آیتم‌های ماه شمسی، گروه‌بندی‌شده بر اساس روز میلادی */
     @OptIn(ExperimentalCoroutinesApi::class)
     val entriesByDay: StateFlow<Map<LocalDate, List<DayEntry>>> = _month
         .flatMapLatest { m ->
-            val from = m.atDay(1)
-            val to = m.plusMonths(1).atDay(1)
+            val from = PersianCalendar.monthStart(m.year, m.month)
+            val to = if (m.month == 12) PersianCalendar.monthStart(m.year + 1, 1)
+            else PersianCalendar.monthStart(m.year, m.month + 1)
             combine(
                 tasks.observeRange(from, to),
                 routines.observeRoutines(),
@@ -58,13 +64,18 @@ class CalendarViewModel(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
-    fun shiftMonth(months: Long) {
-        _month.value = _month.value.plusMonths(months)
+    fun shiftMonth(delta: Int) {
+        var y = _month.value.year
+        var m = _month.value.month + delta
+        while (m > 12) { m -= 12; y++ }
+        while (m < 1) { m += 12; y-- }
+        _month.value = JMonth(y, m)
     }
 
     fun select(date: LocalDate) {
         _selected.value = date
-        if (YearMonth.from(date) != _month.value) _month.value = YearMonth.from(date)
+        val j = PersianCalendar.toJalali(date)
+        _month.value = JMonth(j.year, j.month)
     }
 
     fun toggle(entry: DayEntry) {
@@ -92,14 +103,15 @@ class CalendarViewModel(
 
         taskList.forEach { t ->
             val due = WeekUtils.toLocalDateTime(t.dueAt)
+            val date = due.toLocalDate()
             add(
-                due.toLocalDate(),
+                date,
                 DayEntry(
                     key = "t${t.id}",
                     title = t.title,
                     timeText = due.format(WeekUtils.TIME_FMT),
                     isDone = t.isDone,
-                    date = due.toLocalDate(),
+                    date = date,
                     task = t,
                 ),
             )
@@ -109,18 +121,23 @@ class CalendarViewModel(
         var day = from
         while (day < to) {
             val bit = 1 shl (day.dayOfWeek.value - 1)
-            routineList.filter { it.daysMask and bit != 0 }.forEach { r ->
-                add(
-                    day,
-                    DayEntry(
-                        key = "r${r.id}-${day.toEpochDay()}",
-                        title = r.title,
-                        timeText = r.timeOfDay,
-                        isDone = (r.id to day.toEpochDay()) in doneSet,
-                        date = day,
-                        routineId = r.id,
-                    ),
-                )
+            routineList.forEach { r ->
+                val start = LocalDate.ofEpochDay(r.startDay)
+                val end = r.endDay?.let { LocalDate.ofEpochDay(it) }
+                val inRange = !day.isBefore(start) && (end == null || !day.isAfter(end))
+                if (inRange && (r.daysMask and bit) != 0) {
+                    add(
+                        day,
+                        DayEntry(
+                            key = "r${r.id}-${day.toEpochDay()}",
+                            title = r.title,
+                            timeText = r.timeOfDay,
+                            isDone = (r.id to day.toEpochDay()) in doneSet,
+                            date = day,
+                            routineId = r.id,
+                        ),
+                    )
+                }
             }
             day = day.plusDays(1)
         }

@@ -23,7 +23,7 @@ object WeeklyReport {
 
     fun rangeLabel(weekStart: LocalDate): String {
         val end = weekStart.plusDays(6)
-        return "${WeekUtils.DATE_FMT.format(weekStart)} تا ${WeekUtils.DATE_FMT.format(end)}"
+        return "${PersianCalendar.format(weekStart)} تا ${PersianCalendar.format(end)}"
     }
 
     fun buildText(

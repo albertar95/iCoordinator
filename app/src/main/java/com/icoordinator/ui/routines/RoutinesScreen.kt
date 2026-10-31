@@ -3,8 +3,6 @@ package com.icoordinator.ui.routines
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,9 +11,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -34,9 +34,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.icoordinator.ICoordinatorApp
 import com.icoordinator.data.entity.RoutineEntity
+import com.icoordinator.domain.PersianCalendar
 import com.icoordinator.domain.RoutineUtils
 import com.icoordinator.domain.WeekUtils
 import java.time.DayOfWeek
+import java.time.LocalDate
 
 /** روزهای هفته به ترتیب شنبه تا جمعه */
 private val WEEK_ORDER = listOf(
@@ -64,28 +66,36 @@ fun RoutinesScreen() {
             }
 
             items(routines, key = { it.id }) { routine ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(routine.title, style = MaterialTheme.typography.bodyLarge)
-                        Text(
-                            "${RoutineUtils.daysLabel(routine.daysMask)} - ${routine.timeOfDay}",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(routine.title, style = MaterialTheme.typography.bodyLarge)
+                            Text(
+                                "${RoutineUtils.daysLabel(routine.daysMask)} - ${routine.timeOfDay}",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            Text(
+                                "از ${WeekUtils.dateText(LocalDate.ofEpochDay(routine.startDay))}" +
+                                    (routine.endDay?.let { " تا ${WeekUtils.dateText(LocalDate.ofEpochDay(it))}" }
+                                        ?: " (بدون پایان)"),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        TextButton(onClick = { vm.deleteRoutine(routine) }) { Text("حذف") }
                     }
-                    TextButton(onClick = { vm.deleteRoutine(routine) }) { Text("حذف") }
                 }
             }
 
-            item { Spacer(Modifier.height(72.dp)) }
+            item { Spacer(Modifier.height(88.dp)) }
         }
 
         ExtendedFloatingActionButton(
             onClick = { showAdd = true },
             modifier = Modifier
-                .align(Alignment.BottomStart)
+                .align(Alignment.BottomEnd)
                 .padding(16.dp),
         ) {
             Text("روتین جدید")
@@ -94,25 +104,29 @@ fun RoutinesScreen() {
 
     if (showAdd) {
         AddRoutineDialog(
-            onDismiss = { showAdd = false },
-            onSave = { title, days, time ->
-                if (vm.addRoutine(title, days, time)) showAdd = false
-            },
             errorText = error,
+            onDismiss = {
+                vm.clearError()
+                showAdd = false
+            },
+            onSave = { title, days, time, start, end ->
+                if (vm.addRoutine(title, days, time, start, end)) showAdd = false
+            },
         )
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AddRoutineDialog(
-    onDismiss: () -> Unit,
-    onSave: (String, Set<DayOfWeek>, String) -> Unit,
     errorText: String?,
+    onDismiss: () -> Unit,
+    onSave: (String, Set<DayOfWeek>, String, String, String) -> Unit,
 ) {
     var title by remember { mutableStateOf("") }
     var days by remember { mutableStateOf(setOf<DayOfWeek>()) }
     var time by remember { mutableStateOf("07:00") }
+    var startText by remember { mutableStateOf(PersianCalendar.format(LocalDate.now())) }
+    var endText by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -126,9 +140,10 @@ private fun AddRoutineDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
+
                 Text("روزها", style = MaterialTheme.typography.bodySmall)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    WEEK_ORDER.forEach { day ->
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(WEEK_ORDER) { day ->
                         FilterChip(
                             selected = day in days,
                             onClick = { days = if (day in days) days - day else days + day },
@@ -136,6 +151,7 @@ private fun AddRoutineDialog(
                         )
                     }
                 }
+
                 OutlinedTextField(
                     value = time,
                     onValueChange = { time = it },
@@ -143,11 +159,26 @@ private fun AddRoutineDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
+                OutlinedTextField(
+                    value = startText,
+                    onValueChange = { startText = it },
+                    label = { Text("تاریخ شروع (مثل ۱۴۰۵/۰۸/۱۰)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = endText,
+                    onValueChange = { endText = it },
+                    label = { Text("تاریخ پایان (خالی = بدون پایان)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+
                 errorText?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
             }
         },
         confirmButton = {
-            Button(onClick = { onSave(title, days, time) }) { Text("ذخیره") }
+            Button(onClick = { onSave(title, days, time, startText, endText) }) { Text("ذخیره") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("انصراف") }

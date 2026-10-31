@@ -17,8 +17,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -27,15 +27,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.icoordinator.ICoordinatorApp
+import com.icoordinator.domain.PersianCalendar
 import com.icoordinator.domain.WeekUtils
 import java.time.LocalDate
-import java.time.YearMonth
 
 private val WEEKDAY_HEADERS = listOf("ش", "ی", "د", "س", "چ", "پ", "ج")
 
@@ -49,7 +51,9 @@ fun CalendarScreen() {
     val byDay by vm.entriesByDay.collectAsStateWithLifecycle()
     val selected by vm.selected.collectAsStateWithLifecycle()
 
-    val cells = monthCells(month)
+    val firstDay = PersianCalendar.monthStart(month.year, month.month)
+    val length = PersianCalendar.monthLength(month.year, month.month)
+    val cells = monthCells(firstDay, length)
     val selectedEntries = byDay[selected].orEmpty()
 
     LazyColumn(
@@ -58,7 +62,19 @@ fun CalendarScreen() {
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         item {
-            MonthHeader(month = month, onPrev = { vm.shiftMonth(-1) }, onNext = { vm.shiftMonth(1) })
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = { vm.shiftMonth(-1) }) { Text("ماه قبل") }
+                Text(
+                    "${PersianCalendar.monthName(month.month)} ${month.year}",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                TextButton(onClick = { vm.shiftMonth(1) }) { Text("ماه بعد") }
+            }
         }
 
         item {
@@ -69,6 +85,7 @@ fun CalendarScreen() {
                         modifier = Modifier.weight(1f),
                         textAlign = TextAlign.Center,
                         style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -89,11 +106,9 @@ fun CalendarScreen() {
             }
         }
 
-        item { HorizontalDivider() }
-
         item {
             Text(
-                "برنامه‌ی ${selected.format(WeekUtils.DATE_FMT)} (${WeekUtils.persianDayName(selected.dayOfWeek)})",
+                "برنامه‌ی ${WeekUtils.dateText(selected)} (${WeekUtils.persianDayName(selected.dayOfWeek)})",
                 style = MaterialTheme.typography.titleSmall,
             )
         }
@@ -103,34 +118,34 @@ fun CalendarScreen() {
         }
 
         items(selectedEntries, key = { it.key }) { entry ->
-            EntryRow(entry = entry, onToggle = { vm.toggle(entry) })
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Checkbox(checked = entry.isDone, onCheckedChange = { vm.toggle(entry) })
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            entry.title,
+                            style = MaterialTheme.typography.bodyLarge,
+                            textDecoration = if (entry.isDone) TextDecoration.LineThrough else null,
+                        )
+                        Text(
+                            (if (entry.routineId != null) "روتین" else "تسک") + " - ${entry.timeText}",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
-@Composable
-private fun MonthHeader(month: YearMonth, onPrev: () -> Unit, onNext: () -> Unit) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        TextButton(onClick = onPrev) { Text("ماه قبل") }
-        Text(
-            "${month.year}/${"%02d".format(month.monthValue)}",
-            style = MaterialTheme.typography.titleMedium,
-        )
-        TextButton(onClick = onNext) { Text("ماه بعد") }
-    }
-}
-
-/** خانه‌های تقویم: اول خانه‌های خالی تا شنبه، بعد روزهای ماه. */
-private fun monthCells(month: YearMonth): List<LocalDate?> {
-    val first = month.atDay(1)
-    // شنبه = ۰، جمعه = ۶
-    val leading = (first.dayOfWeek.value - 6 + 7) % 7
-    return List<LocalDate?>(leading) { null } +
-        (1..month.lengthOfMonth()).map { month.atDay(it) }
+/** خانه‌های تقویم: خانه‌های خالی تا شنبه، سپس روزهای ماه. */
+private fun monthCells(firstDay: LocalDate, length: Int): List<LocalDate?> {
+    // شنبه = ۰ ... جمعه = ۶
+    val leading = (firstDay.dayOfWeek.value - 6 + 7) % 7
+    return List<LocalDate?>(leading) { null } + (0 until length).map { firstDay.plusDays(it.toLong()) }
 }
 
 @Composable
@@ -141,46 +156,38 @@ private fun DayCell(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val bg = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
+    val bg = when {
+        isSelected -> MaterialTheme.colorScheme.primary
+        else -> Color.Transparent
+    }
+    val textColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
     Box(
         modifier = modifier
             .aspectRatio(1f)
             .padding(2.dp)
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(12.dp))
             .background(bg)
             .clickable(enabled = date != null, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
         if (date != null) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(date.dayOfMonth.toString(), style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    PersianCalendar.toJalali(date).day.toString(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = textColor,
+                )
                 if (hasItems) {
                     Box(
                         modifier = Modifier
                             .size(5.dp)
-                            .background(MaterialTheme.colorScheme.primary, CircleShape),
+                            .background(
+                                if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
+                                CircleShape,
+                            ),
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun EntryRow(entry: DayEntry, onToggle: () -> Unit) {
-    val label = if (entry.routineId != null) "روتین" else "تسک"
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Checkbox(checked = entry.isDone, onCheckedChange = { onToggle() })
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                entry.title,
-                style = MaterialTheme.typography.bodyLarge,
-                textDecoration = if (entry.isDone) TextDecoration.LineThrough else null,
-            )
-            Text("$label - ${entry.timeText}", style = MaterialTheme.typography.bodySmall)
         }
     }
 }

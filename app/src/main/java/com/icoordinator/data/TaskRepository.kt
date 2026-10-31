@@ -3,10 +3,13 @@ package com.icoordinator.data
 import com.icoordinator.alarm.TaskAlarmScheduler
 import com.icoordinator.data.dao.TaskDao
 import com.icoordinator.data.entity.TaskEntity
+import com.icoordinator.domain.RepeatType
+import com.icoordinator.domain.TaskRules
 import com.icoordinator.domain.WeekUtils
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.LocalTime
 
 class TaskRepository(
     private val dao: TaskDao,
@@ -16,19 +19,35 @@ class TaskRepository(
     fun observeWeek(weekStart: LocalDate): Flow<List<TaskEntity>> =
         dao.observeWeek(weekStart.toEpochDay())
 
-    /** تسک‌های بازه‌ی [from, to) را برمی‌گرداند (to معمولاً اولین روز ماه بعد است). */
+    /** تسک‌های بازه‌ی [from, to) */
     fun observeRange(from: LocalDate, to: LocalDate): Flow<List<TaskEntity>> =
         dao.observeRange(WeekUtils.toMillis(from.atStartOfDay()), WeekUtils.toMillis(to.atStartOfDay()))
 
-    suspend fun addTask(title: String, dueAt: LocalDateTime, projectId: Long?) {
-        val draft = TaskEntity(
-            weekStart = WeekUtils.weekStartOf(dueAt.toLocalDate()).toEpochDay(),
-            dueAt = WeekUtils.toMillis(dueAt),
-            title = title.trim(),
-            projectId = projectId,
-        )
-        val id = dao.insert(draft)
-        alarms.schedule(id, draft.title, draft.dueAt)
+    /** یک تسک یا تکرارهای آن را می‌سازد و برای هرکدام آلارم می‌گذارد. تعداد ساخته‌شده را برمی‌گرداند. */
+    suspend fun addTasks(
+        title: String,
+        startDate: LocalDate,
+        time: LocalTime,
+        projectId: Long?,
+        repeat: RepeatType,
+        until: LocalDate?,
+        alarmOffset: Int?,
+    ): Int {
+        val clean = title.trim()
+        val dates = TaskRules.occurrenceDates(startDate, repeat, until)
+        dates.forEach { date ->
+            val dueAt = WeekUtils.toMillis(LocalDateTime.of(date, time))
+            val task = TaskEntity(
+                weekStart = WeekUtils.weekStartOf(date).toEpochDay(),
+                dueAt = dueAt,
+                title = clean,
+                projectId = projectId,
+                alarmOffsetMinutes = alarmOffset,
+            )
+            val id = dao.insert(task)
+            alarms.schedule(id, clean, dueAt, alarmOffset)
+        }
+        return dates.size
     }
 
     suspend fun toggleTask(task: TaskEntity) {
@@ -37,7 +56,7 @@ class TaskRepository(
         if (updated.isDone) {
             alarms.cancel(task.id)
         } else {
-            alarms.schedule(task.id, updated.title, updated.dueAt)
+            alarms.schedule(task.id, updated.title, updated.dueAt, updated.alarmOffsetMinutes)
         }
     }
 

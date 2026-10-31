@@ -20,7 +20,7 @@ class WeeklyReportTest {
     @Test
     fun buildText_listsUndoneTasksAndScore() {
         val text = WeeklyReport.buildText(
-            rangeLabel = "2026/10/24 تا 2026/10/30",
+            rangeLabel = "range",
             tasks = listOf("خرید" to true, "ورزش" to false),
             routinesDone = 3,
             routinesTotal = 4,
@@ -33,8 +33,9 @@ class WeeklyReportTest {
     }
 
     @Test
-    fun rangeLabel_spansSevenDays() {
-        val label = WeeklyReport.rangeLabel(LocalDate.of(2026, 10, 24))
-        assertEquals("2026/10/24 تا 2026/10/30", label)
+    fun rangeLabel_usesJalaliDatesAndSpansSevenDays() {
+        val start = LocalDate.of(2026, 10, 24)
+        val expected = "${PersianCalendar.format(start)} تا ${PersianCalendar.format(start.plusDays(6))}"
+        assertEquals(expected, WeeklyReport.rangeLabel(start))
     }
 }

@@ -6,9 +6,10 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 
 /**
- * تسک هفتگی.
- * weekStart: روز شنبه‌ی آغاز هفته به صورت epochDay
- * dueAt: زمان انجام تسک به صورت epoch millis (برای تقویم و آلارم در اسپرینت‌های بعد)
+ * تسک هفتگی. هر تکرار یک ردیف جداگانه است.
+ * weekStart: شنبه‌ی آغاز هفته (epochDay)
+ * dueAt: زمان انجام به میلی‌ثانیه
+ * alarmOffsetMinutes: null یعنی بدون آلارم، ۰ یعنی لحظه‌ی رسیدن، و عدد مثبت یعنی چند دقیقه قبل
  */
 @Entity(
     tableName = "tasks",
@@ -29,5 +30,6 @@ data class TaskEntity(
     val title: String,
     val projectId: Long? = null,
     val isDone: Boolean = false,
+    val alarmOffsetMinutes: Int? = null,
     val createdAt: Long = System.currentTimeMillis(),
 )
