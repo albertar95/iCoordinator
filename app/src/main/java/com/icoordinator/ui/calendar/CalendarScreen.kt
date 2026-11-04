@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -37,6 +36,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.icoordinator.ICoordinatorApp
 import com.icoordinator.domain.PersianCalendar
 import com.icoordinator.domain.WeekUtils
+import com.icoordinator.ui.components.*
 import java.time.LocalDate
 
 private val WEEKDAY_HEADERS = listOf("ش", "ی", "د", "س", "چ", "پ", "ج")
@@ -62,18 +62,20 @@ fun CalendarScreen() {
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextButton(onClick = { vm.shiftMonth(-1) }) { Text("ماه قبل") }
-                Text(
-                    "${PersianCalendar.monthName(month.month)} ${month.year}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-                TextButton(onClick = { vm.shiftMonth(1) }) { Text("ماه بعد") }
+            AppCard(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(onClick = { vm.shiftMonth(-1) }) { Text("ماه قبل") }
+                    Text(
+                        "${PersianCalendar.monthName(month.month)} ${month.year}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    TextButton(onClick = { vm.shiftMonth(1) }) { Text("ماه بعد") }
+                }
             }
         }
 
@@ -107,20 +109,25 @@ fun CalendarScreen() {
         }
 
         item {
-            Text(
+            SectionTitle(
                 "برنامه‌ی ${WeekUtils.dateText(selected)} (${WeekUtils.persianDayName(selected.dayOfWeek)})",
-                style = MaterialTheme.typography.titleSmall,
             )
         }
 
         if (selectedEntries.isEmpty()) {
-            item { Text("چیزی برای این روز نیست") }
+            item {
+                EmptyState(
+                    title = "چیزی برای این روز نیست",
+                    message = "از «لاگ هفتگی» یا «روتین‌ها» برای این روز برنامه اضافه کن",
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
 
         items(selectedEntries, key = { it.key }) { entry ->
-            Card(modifier = Modifier.fillMaxWidth()) {
+            AppCard(modifier = Modifier.fillMaxWidth()) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Checkbox(checked = entry.isDone, onCheckedChange = { vm.toggle(entry) })

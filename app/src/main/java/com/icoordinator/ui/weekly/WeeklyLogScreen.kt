@@ -15,7 +15,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
@@ -42,6 +41,7 @@ import com.icoordinator.domain.AlarmOption
 import com.icoordinator.domain.PersianCalendar
 import com.icoordinator.domain.RepeatType
 import com.icoordinator.domain.WeekUtils
+import com.icoordinator.ui.components.*
 import java.time.LocalDate
 
 @Composable
@@ -57,6 +57,7 @@ fun WeeklyLogScreen() {
     val projects by vm.projectList.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
     var showAdd by remember { mutableStateOf(false) }
+    var taskToDelete by remember { mutableStateOf<TaskEntity?>(null) }
 
     val projectNames = projects.associate { it.id to it.title }
     val weekEnd = weekStart.plusDays(6)
@@ -69,32 +70,34 @@ fun WeeklyLogScreen() {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    TextButton(onClick = { vm.shiftWeek(-1) }) { Text("هفته قبل") }
-                    Text(
-                        "${WeekUtils.dateText(weekStart)} تا ${WeekUtils.dateText(weekEnd)}",
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    TextButton(onClick = { vm.shiftWeek(1) }) { Text("هفته بعد") }
-                }
-            }
-
-            item {
-                Card(modifier = Modifier.fillMaxWidth()) {
+                AppCard(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        TextButton(onClick = { vm.shiftWeek(-1) }) { Text("هفته قبل") }
+                        Text(
+                            "${WeekUtils.dateText(weekStart)} تا ${WeekUtils.dateText(weekEnd)}",
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        TextButton(onClick = { vm.shiftWeek(1) }) { Text("هفته بعد") }
+                    }
                     Text(
                         "انجام‌شده: $doneCount از ${tasks.size}",
                         style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(12.dp),
                     )
                 }
             }
 
             if (tasks.isEmpty()) {
-                item { Text("برای این هفته تسکی نداری") }
+                item {
+                    EmptyState(
+                        title = "برای این هفته تسکی نداری",
+                        message = "با دکمه‌ی «تسک جدید» اولین تسک را اضافه کن",
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
 
             items(tasks, key = { it.id }) { task ->
@@ -102,7 +105,7 @@ fun WeeklyLogScreen() {
                     task = task,
                     projectName = task.projectId?.let { projectNames[it] },
                     onToggle = { vm.toggleTask(task) },
-                    onDelete = { vm.deleteTask(task) },
+                    onDelete = { taskToDelete = task },
                 )
             }
 
@@ -124,6 +127,7 @@ fun WeeklyLogScreen() {
             weekStart = weekStart,
             projects = projects,
             errorText = error,
+            onEdit = { vm.clearError() },
             onDismiss = {
                 vm.clearError()
                 showAdd = false
@@ -131,6 +135,18 @@ fun WeeklyLogScreen() {
             onSave = { title, day, time, projectId, repeat, until, alarm ->
                 if (vm.addTask(title, day, time, projectId, repeat, until, alarm)) showAdd = false
             },
+        )
+    }
+
+    val pendingDelete = taskToDelete
+    if (pendingDelete != null) {
+        ConfirmDeleteDialog(
+            itemName = pendingDelete.title,
+            onConfirm = {
+                vm.deleteTask(pendingDelete)
+                taskToDelete = null
+            },
+            onDismiss = { taskToDelete = null },
         )
     }
 }
@@ -148,20 +164,22 @@ private fun TaskRow(
         due.format(WeekUtils.TIME_FMT)
     val suffix = (projectName?.let { " | $it" } ?: "") + alarmText
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Checkbox(checked = task.isDone, onCheckedChange = { onToggle() })
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                task.title,
-                style = MaterialTheme.typography.bodyLarge,
-                textDecoration = if (task.isDone) TextDecoration.LineThrough else null,
-            )
-            Text(dueLabel + suffix, style = MaterialTheme.typography.bodySmall)
+    AppCard(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(checked = task.isDone, onCheckedChange = { onToggle() })
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    task.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    textDecoration = if (task.isDone) TextDecoration.LineThrough else null,
+                )
+                Text(dueLabel + suffix, style = MaterialTheme.typography.bodySmall)
+            }
+            TextButton(onClick = onDelete) { Text("حذف") }
         }
-        TextButton(onClick = onDelete) { Text("حذف") }
     }
 }
 
@@ -170,6 +188,7 @@ private fun AddTaskDialog(
     weekStart: LocalDate,
     projects: List<ProjectEntity>,
     errorText: String?,
+    onEdit: () -> Unit,
     onDismiss: () -> Unit,
     onSave: (String, LocalDate, String, Long?, RepeatType, String, Int?) -> Unit,
 ) {
@@ -188,7 +207,10 @@ private fun AddTaskDialog(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = title,
-                    onValueChange = { title = it },
+                    onValueChange = {
+                        title = it
+                        onEdit()
+                    },
                     label = { Text("عنوان تسک") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -199,7 +221,10 @@ private fun AddTaskDialog(
                     items(WeekUtils.weekDays(weekStart)) { d ->
                         FilterChip(
                             selected = d == day,
-                            onClick = { day = d },
+                            onClick = {
+                                day = d
+                                onEdit()
+                            },
                             label = { Text("${WeekUtils.persianDayName(d.dayOfWeek)} ${PersianCalendar.toJalali(d).day}") },
                         )
                     }
@@ -207,7 +232,10 @@ private fun AddTaskDialog(
 
                 OutlinedTextField(
                     value = time,
-                    onValueChange = { time = it },
+                    onValueChange = {
+                        time = it
+                        onEdit()
+                    },
                     label = { Text("ساعت (HH:mm)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -218,7 +246,10 @@ private fun AddTaskDialog(
                     items(RepeatType.values().toList()) { type ->
                         FilterChip(
                             selected = repeat == type,
-                            onClick = { repeat = type },
+                            onClick = {
+                                repeat = type
+                                onEdit()
+                            },
                             label = { Text(type.label) },
                         )
                     }
@@ -226,7 +257,10 @@ private fun AddTaskDialog(
                 if (repeat != RepeatType.NONE) {
                     OutlinedTextField(
                         value = untilText,
-                        onValueChange = { untilText = it },
+                        onValueChange = {
+                            untilText = it
+                            onEdit()
+                        },
                         label = { Text("پایان تکرار (مثل ۱۴۰۵/۰۸/۱۰)") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
@@ -238,7 +272,10 @@ private fun AddTaskDialog(
                     items(ALARM_OPTIONS) { option ->
                         FilterChip(
                             selected = alarm == option,
-                            onClick = { alarm = option },
+                            onClick = {
+                                alarm = option
+                                onEdit()
+                            },
                             label = { Text(option.label) },
                         )
                     }
@@ -249,20 +286,28 @@ private fun AddTaskDialog(
                     item {
                         FilterChip(
                             selected = projectId == null,
-                            onClick = { projectId = null },
+                            onClick = {
+                                projectId = null
+                                onEdit()
+                            },
                             label = { Text("بدون پروژه") },
                         )
                     }
                     items(projects) { p ->
                         FilterChip(
                             selected = projectId == p.id,
-                            onClick = { projectId = p.id },
+                            onClick = {
+                                projectId = p.id
+                                onEdit()
+                            },
                             label = { Text(p.title) },
                         )
                     }
                 }
 
-                errorText?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                errorText?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
             }
         },
         confirmButton = {

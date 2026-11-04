@@ -4,12 +4,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -66,8 +69,20 @@ fun AppNavHost() {
                                     restoreState = true
                                 }
                             },
+                            // icon is a required (non-null) slot in NavigationBarItem, so it stays empty: no icons (F1)
                             icon = { },
-                            label = { Text(item.label) },
+                            label = {
+                                Text(
+                                    item.label,
+                                    fontWeight = if (current == item.route) FontWeight.Bold else FontWeight.Normal,
+                                )
+                            },
+                            alwaysShowLabel = true,
+                            colors = NavigationBarItemDefaults.colors(
+                                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            ),
                         )
                     }
                 }

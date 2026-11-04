@@ -15,7 +15,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -37,6 +36,7 @@ import com.icoordinator.data.entity.RoutineEntity
 import com.icoordinator.domain.PersianCalendar
 import com.icoordinator.domain.RoutineUtils
 import com.icoordinator.domain.WeekUtils
+import com.icoordinator.ui.components.*
 import java.time.DayOfWeek
 import java.time.LocalDate
 
@@ -54,6 +54,7 @@ fun RoutinesScreen() {
     val routines by vm.routines.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
     var showAdd by remember { mutableStateOf(false) }
+    var routineToDelete by remember { mutableStateOf<RoutineEntity?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         LazyColumn(
@@ -62,13 +63,19 @@ fun RoutinesScreen() {
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             if (routines.isEmpty()) {
-                item { Text("هنوز روتینی نداری") }
+                item {
+                    EmptyState(
+                        title = "هنوز روتینی نداری",
+                        message = "با دکمه‌ی «روتین جدید» یک عادت تکرارشونده بساز",
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
 
             items(routines, key = { it.id }) { routine ->
-                Card(modifier = Modifier.fillMaxWidth()) {
+                AppCard(modifier = Modifier.fillMaxWidth()) {
                     Row(
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
@@ -84,7 +91,7 @@ fun RoutinesScreen() {
                                 style = MaterialTheme.typography.bodySmall,
                             )
                         }
-                        TextButton(onClick = { vm.deleteRoutine(routine) }) { Text("حذف") }
+                        TextButton(onClick = { routineToDelete = routine }) { Text("حذف") }
                     }
                 }
             }
@@ -105,6 +112,7 @@ fun RoutinesScreen() {
     if (showAdd) {
         AddRoutineDialog(
             errorText = error,
+            onEdit = { vm.clearError() },
             onDismiss = {
                 vm.clearError()
                 showAdd = false
@@ -114,11 +122,24 @@ fun RoutinesScreen() {
             },
         )
     }
+
+    val pendingDelete = routineToDelete
+    if (pendingDelete != null) {
+        ConfirmDeleteDialog(
+            itemName = pendingDelete.title,
+            onConfirm = {
+                vm.deleteRoutine(pendingDelete)
+                routineToDelete = null
+            },
+            onDismiss = { routineToDelete = null },
+        )
+    }
 }
 
 @Composable
 private fun AddRoutineDialog(
     errorText: String?,
+    onEdit: () -> Unit,
     onDismiss: () -> Unit,
     onSave: (String, Set<DayOfWeek>, String, String, String) -> Unit,
 ) {
@@ -135,7 +156,10 @@ private fun AddRoutineDialog(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = title,
-                    onValueChange = { title = it },
+                    onValueChange = {
+                        title = it
+                        onEdit()
+                    },
                     label = { Text("عنوان روتین") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -146,7 +170,10 @@ private fun AddRoutineDialog(
                     items(WEEK_ORDER) { day ->
                         FilterChip(
                             selected = day in days,
-                            onClick = { days = if (day in days) days - day else days + day },
+                            onClick = {
+                                days = if (day in days) days - day else days + day
+                                onEdit()
+                            },
                             label = { Text(WeekUtils.persianDayName(day)) },
                         )
                     }
@@ -154,27 +181,38 @@ private fun AddRoutineDialog(
 
                 OutlinedTextField(
                     value = time,
-                    onValueChange = { time = it },
+                    onValueChange = {
+                        time = it
+                        onEdit()
+                    },
                     label = { Text("ساعت (HH:mm)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = startText,
-                    onValueChange = { startText = it },
+                    onValueChange = {
+                        startText = it
+                        onEdit()
+                    },
                     label = { Text("تاریخ شروع (مثل ۱۴۰۵/۰۸/۱۰)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedTextField(
                     value = endText,
-                    onValueChange = { endText = it },
+                    onValueChange = {
+                        endText = it
+                        onEdit()
+                    },
                     label = { Text("تاریخ پایان (خالی = بدون پایان)") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
-                errorText?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                errorText?.let {
+                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                }
             }
         },
         confirmButton = {

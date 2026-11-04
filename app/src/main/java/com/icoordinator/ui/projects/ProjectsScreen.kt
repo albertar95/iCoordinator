@@ -3,8 +3,6 @@ package com.icoordinator.ui.projects
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -15,9 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.ExtendedFloatingActionButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -27,12 +23,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.icoordinator.ICoordinatorApp
+import com.icoordinator.data.entity.ProjectEntity
+import com.icoordinator.ui.components.*
 
 @Composable
 fun ProjectsScreen(onOpenProject: (Long) -> Unit) {
@@ -41,18 +40,15 @@ fun ProjectsScreen(onOpenProject: (Long) -> Unit) {
     }
     val projects by vm.projects.collectAsStateWithLifecycle()
     var showCreate by remember { mutableStateOf(false) }
+    var projectToDelete by remember { mutableStateOf<ProjectEntity?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (projects.isEmpty()) {
-            Column(
-                modifier = Modifier.fillMaxSize().padding(24.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text("هنوز پروژه‌ای نداری", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(4.dp))
-                Text("با دکمه‌ی «پروژه جدید» شروع کن", style = MaterialTheme.typography.bodyMedium)
-            }
+            EmptyState(
+                title = "هنوز پروژه‌ای نداری",
+                message = "با دکمه‌ی «پروژه جدید» شروع کن",
+                modifier = Modifier.fillMaxSize().padding(16.dp),
+            )
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -60,24 +56,22 @@ fun ProjectsScreen(onOpenProject: (Long) -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 items(projects, key = { it.project.id }) { summary ->
-                    Card(
+                    AppCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { onOpenProject(summary.project.id) },
                     ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text(summary.project.title, style = MaterialTheme.typography.titleMedium)
-                            Spacer(Modifier.height(8.dp))
-                            LinearProgressIndicator(
-                                progress = { summary.progress / 100f },
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text("پیشرفت: ${summary.progress}٪", style = MaterialTheme.typography.bodySmall)
-                            Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                                TextButton(onClick = { vm.deleteProject(summary.project) }) {
-                                    Text("حذف")
-                                }
+                        Text(summary.project.title, style = MaterialTheme.typography.titleMedium)
+                        Spacer(Modifier.height(8.dp))
+                        ProgressLine(
+                            percent = summary.progress,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text("پیشرفت: ${summary.progress}٪", style = MaterialTheme.typography.bodySmall)
+                        Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                            TextButton(onClick = { projectToDelete = summary.project }) {
+                                Text("حذف")
                             }
                         }
                     }
@@ -103,6 +97,18 @@ fun ProjectsScreen(onOpenProject: (Long) -> Unit) {
                 vm.createProject(title)
                 showCreate = false
             },
+        )
+    }
+
+    val pendingDelete = projectToDelete
+    if (pendingDelete != null) {
+        ConfirmDeleteDialog(
+            itemName = pendingDelete.title,
+            onConfirm = {
+                vm.deleteProject(pendingDelete)
+                projectToDelete = null
+            },
+            onDismiss = { projectToDelete = null },
         )
     }
 }

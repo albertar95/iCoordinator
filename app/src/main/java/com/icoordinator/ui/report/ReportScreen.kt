@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,6 +24,7 @@ import com.icoordinator.ICoordinatorApp
 import com.icoordinator.data.entity.WeeklyReportEntity
 import com.icoordinator.domain.ReportScore
 import com.icoordinator.domain.WeeklyReport
+import com.icoordinator.ui.components.*
 import java.time.LocalDate
 
 @Composable
@@ -51,28 +51,38 @@ fun ReportScreen() {
         }
 
         item {
-            Text("گزارش‌های ذخیره‌شده", style = MaterialTheme.typography.titleSmall)
+            SectionTitle("گزارش‌های ذخیره‌شده")
         }
 
         if (reports.isEmpty()) {
-            item { Text("هنوز گزارشی ساخته نشده") }
+            item {
+                EmptyState(
+                    title = "هنوز گزارشی ساخته نشده",
+                    message = "با دکمه‌ی بالا گزارش هفته‌ی جاری را بساز",
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
         }
 
         items(reports, key = { it.weekStart }) { report ->
-            Row(
+            AppCard(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { vm.select(report) }
-                    .padding(vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+                    .clickable { vm.select(report) },
             ) {
-                Text(WeeklyReport.rangeLabel(LocalDate.ofEpochDay(report.weekStart)))
-                Text(
-                    scoreLabel(report),
-                    color = scoreColor(report.scoreName),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        WeeklyReport.rangeLabel(LocalDate.ofEpochDay(report.weekStart)),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    // DRAFT: the source of the percent is an open question (see return.md).
+                    ScorePill(percent = report.percent)
+                }
+                Text(report.text, style = MaterialTheme.typography.bodyMedium)
             }
         }
     }
@@ -80,20 +90,20 @@ fun ReportScreen() {
 
 @Composable
 private fun ReportCard(report: WeeklyReportEntity) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(
-                "نمره: ${scoreLabel(report)}",
-                style = MaterialTheme.typography.titleMedium,
-                color = scoreColor(report.scoreName),
-            )
-            Text(report.text, style = MaterialTheme.typography.bodyMedium)
-        }
+    AppCard(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            "نمره: ${scoreLabel(report)}",
+            style = MaterialTheme.typography.titleMedium,
+            color = scoreColor(report.scoreName),
+        )
+        Text(report.text, style = MaterialTheme.typography.bodyMedium)
     }
 }
 
 private fun scoreLabel(report: WeeklyReportEntity): String =
     report.scoreName?.let { name -> ReportScore.valueOf(name).label } ?: "بدون داده"
+
+/** DRAFT placeholder: WeeklyReportEntity was not provided, so the real percent field is unknown. */
 
 private fun scoreColor(scoreName: String?): Color = when (scoreName) {
     ReportScore.GOOD.name -> Color(0xFF2E7D32)

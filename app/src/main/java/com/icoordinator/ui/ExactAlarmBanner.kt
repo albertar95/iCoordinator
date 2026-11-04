@@ -6,9 +6,9 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.icoordinator.ui.components.*
 
 /** اگر کاربر اجازه‌ی آلارم دقیق را نداده باشد، یادآوری نشان می‌دهد. */
 @Composable
@@ -24,16 +25,16 @@ fun ExactAlarmBanner() {
     val context = LocalContext.current
     if (canScheduleExactAlarms(context)) return
 
-    Column(
+    AppCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(
             "برای آلارم دقیق تسک‌ها و روتین‌ها، اجازه‌ی «آلارم و یادآور» را فعال کن.",
             style = MaterialTheme.typography.bodySmall,
         )
+        Spacer(Modifier.height(4.dp))
         TextButton(onClick = { openExactAlarmSettings(context) }) {
             Text("باز کردن تنظیمات")
         }
