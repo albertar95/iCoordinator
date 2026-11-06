@@ -1,18 +1,13 @@
 package com.icoordinator.ui
 
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -38,16 +33,6 @@ object Routes {
     fun projectDetail(id: Long) = "project/$id"
 }
 
-data class BottomItem(val route: String, val label: String)
-
-val bottomItems = listOf(
-    BottomItem(Routes.PROJECTS, "پروژه‌ها"),
-    BottomItem(Routes.WEEKLY_LOG, "لاگ هفتگی"),
-    BottomItem(Routes.ROUTINES, "روتین‌ها"),
-    BottomItem(Routes.CALENDAR, "تقویم"),
-    BottomItem(Routes.REPORT, "گزارش هفته"),
-)
-
 @Composable
 fun AppNavHost() {
     val navController = rememberNavController()
@@ -56,62 +41,45 @@ fun AppNavHost() {
     val onDetail = current == Routes.PROJECT_DETAIL
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             if (!onDetail) {
-                NavigationBar {
-                    bottomItems.forEach { item ->
-                        NavigationBarItem(
-                            selected = current == item.route,
-                            onClick = {
-                                navController.navigate(item.route) {
-                                    popUpTo(navController.graph.startDestinationId) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            // icon is a required (non-null) slot in NavigationBarItem, so it stays empty: no icons (F1)
-                            icon = { },
-                            label = {
-                                Text(
-                                    item.label,
-                                    fontWeight = if (current == item.route) FontWeight.Bold else FontWeight.Normal,
-                                )
-                            },
-                            alwaysShowLabel = true,
-                            colors = NavigationBarItemDefaults.colors(
-                                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                selectedTextColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            ),
-                        )
-                    }
-                }
+                AppBottomBar(
+                    currentRoute = current,
+                    onNavigate = { route ->
+                        navController.navigate(route) {
+                            popUpTo(navController.graph.startDestinationId) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                )
             }
         },
     ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            ExactAlarmBanner()
-
-            NavHost(
-                navController = navController,
-                startDestination = Routes.PROJECTS,
-                modifier = Modifier.weight(1f),
-            ) {
-                composable(Routes.PROJECTS) {
-                    ProjectsScreen(onOpenProject = { id -> navController.navigate(Routes.projectDetail(id)) })
-                }
-                composable(
-                    Routes.PROJECT_DETAIL,
-                    arguments = listOf(navArgument("id") { type = NavType.LongType }),
-                ) { entry ->
-                    val id = entry.arguments?.getLong("id") ?: return@composable
-                    ProjectDetailScreen(projectId = id, onBack = { navController.popBackStack() })
-                }
-                composable(Routes.WEEKLY_LOG) { WeeklyLogScreen() }
-                composable(Routes.ROUTINES) { RoutinesScreen() }
-                composable(Routes.CALENDAR) { CalendarScreen() }
-                composable(Routes.REPORT) { ReportScreen() }
+        NavHost(
+            navController = navController,
+            startDestination = Routes.PROJECTS,
+            // 24 dp extra room above the bar so nothing sits under the raised centre circle
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(bottom = if (onDetail) 0.dp else 24.dp),
+        ) {
+            composable(Routes.PROJECTS) {
+                ProjectsScreen(onOpenProject = { id -> navController.navigate(Routes.projectDetail(id)) })
             }
+            composable(
+                Routes.PROJECT_DETAIL,
+                arguments = listOf(navArgument("id") { type = NavType.LongType }),
+            ) { entry ->
+                val id = entry.arguments?.getLong("id") ?: return@composable
+                ProjectDetailScreen(projectId = id, onBack = { navController.popBackStack() })
+            }
+            composable(Routes.WEEKLY_LOG) { WeeklyLogScreen() }
+            composable(Routes.ROUTINES) { RoutinesScreen() }
+            composable(Routes.CALENDAR) { CalendarScreen() }
+            composable(Routes.REPORT) { ReportScreen() }
         }
     }
 }

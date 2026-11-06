@@ -1,5 +1,6 @@
 package com.icoordinator.ui.weekly
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,15 +14,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -29,11 +26,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.icoordinator.ICoordinatorApp
+import com.icoordinator.R
 import com.icoordinator.data.entity.ProjectEntity
 import com.icoordinator.data.entity.TaskEntity
 import com.icoordinator.domain.ALARM_OPTIONS
@@ -41,7 +43,20 @@ import com.icoordinator.domain.AlarmOption
 import com.icoordinator.domain.PersianCalendar
 import com.icoordinator.domain.RepeatType
 import com.icoordinator.domain.WeekUtils
-import com.icoordinator.ui.components.*
+import com.icoordinator.ui.components.AppTextField
+import com.icoordinator.ui.components.CheckCircle
+import com.icoordinator.ui.components.ConfirmDeleteDialog
+import com.icoordinator.ui.components.DeleteIconButton
+import com.icoordinator.ui.components.EmptyState
+import com.icoordinator.ui.components.PageHeader
+import com.icoordinator.ui.components.PillButton
+import com.icoordinator.ui.components.PillRow
+import com.icoordinator.ui.components.ProgressLine
+import com.icoordinator.ui.components.QuickAction
+import com.icoordinator.ui.components.SectionLabel
+import com.icoordinator.ui.components.TagText
+import com.icoordinator.ui.openExactAlarmSettings
+import com.icoordinator.ui.rememberExactAlarmAllowed
 import java.time.LocalDate
 
 @Composable
@@ -59,66 +74,141 @@ fun WeeklyLogScreen() {
     var showAdd by remember { mutableStateOf(false) }
     var taskToDelete by remember { mutableStateOf<TaskEntity?>(null) }
 
+    val context = LocalContext.current
+    val alarmAllowed = rememberExactAlarmAllowed()
+    val scheme = MaterialTheme.colorScheme
+
     val projectNames = projects.associate { it.id to it.title }
     val weekEnd = weekStart.plusDays(6)
     val doneCount = tasks.count { it.isDone }
+    val donePercent = if (tasks.isEmpty()) 0 else doneCount * 100 / tasks.size
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            item {
-                AppCard(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        TextButton(onClick = { vm.shiftWeek(-1) }) { Text("هفته قبل") }
-                        Text(
-                            "${WeekUtils.dateText(weekStart)} تا ${WeekUtils.dateText(weekEnd)}",
-                            style = MaterialTheme.typography.titleSmall,
-                        )
-                        TextButton(onClick = { vm.shiftWeek(1) }) { Text("هفته بعد") }
-                    }
-                    Text(
-                        "انجام‌شده: $doneCount از ${tasks.size}",
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                }
-            }
-
-            if (tasks.isEmpty()) {
-                item {
-                    EmptyState(
-                        title = "برای این هفته تسکی نداری",
-                        message = "با دکمه‌ی «تسک جدید» اولین تسک را اضافه کن",
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            }
-
-            items(tasks, key = { it.id }) { task ->
-                TaskRow(
-                    task = task,
-                    projectName = task.projectId?.let { projectNames[it] },
-                    onToggle = { vm.toggleTask(task) },
-                    onDelete = { taskToDelete = task },
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(scheme.background),
+        contentPadding = PaddingValues(bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(scheme.primaryContainer.copy(alpha = 0.6f), scheme.background),
+                        ),
+                    ),
+            ) {
+                PageHeader(title = "تسک‌ها")
+                Text(
+                    text = "سلام 👋",
+                    style = MaterialTheme.typography.titleSmall.copy(fontSize = 16.sp, lineHeight = 24.sp),
+                    fontWeight = FontWeight.Medium,
+                    color = scheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 20.dp),
                 )
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "${WeekUtils.dateText(weekStart)} تا ${WeekUtils.dateText(weekEnd)}",
+                        style = MaterialTheme.typography.titleSmall.copy(fontSize = 15.sp, lineHeight = 22.sp),
+                        color = scheme.onSurface,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text(
+                        text = "انجام‌شده: $doneCount از ${tasks.size}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = scheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                ProgressLine(
+                    percent = donePercent,
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                )
+                Spacer(Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp),
+                    verticalAlignment = Alignment.Top,
+                ) {
+                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        QuickAction(
+                            icon = R.drawable.ic_tb_plus,
+                            label = "تسک جدید",
+                            onClick = { showAdd = true },
+                            accent = true,
+                        )
+                    }
+                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        QuickAction(
+                            icon = R.drawable.ic_tb_chevron_left,
+                            label = "هفته قبل",
+                            onClick = { vm.shiftWeek(-1) },
+                        )
+                    }
+                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        QuickAction(
+                            icon = R.drawable.ic_tb_chevron_right,
+                            label = "هفته بعد",
+                            onClick = { vm.shiftWeek(1) },
+                        )
+                    }
+                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        if (!alarmAllowed) {
+                            QuickAction(
+                                icon = R.drawable.ic_tb_bell,
+                                label = "فعال‌سازی آلارم",
+                                onClick = { openExactAlarmSettings(context) },
+                            )
+                        }
+                    }
+                }
             }
-
-            item { Spacer(Modifier.height(88.dp)) }
         }
 
-        ExtendedFloatingActionButton(
-            onClick = { showAdd = true },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp),
-        ) {
-            Text("تسک جدید")
+        item {
+            SectionLabel(
+                text = "تسک‌ها",
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+        }
+
+        if (tasks.isEmpty()) {
+            item {
+                EmptyState(
+                    icon = R.drawable.ic_tb_checklist,
+                    title = "برای این هفته تسکی نداری",
+                    message = "با دکمه‌ی «تسک جدید» اولین تسک را اضافه کن",
+                    modifier = Modifier.fillMaxWidth(),
+                    action = {
+                        PillButton(
+                            text = "تسک جدید",
+                            onClick = { showAdd = true },
+                            icon = R.drawable.ic_tb_plus,
+                        )
+                    },
+                )
+            }
+        }
+
+        items(tasks, key = { it.id }) { task ->
+            TaskRow(
+                task = task,
+                projectName = task.projectId?.let { projectNames[it] },
+                onToggle = { vm.toggleTask(task) },
+                onDelete = { taskToDelete = task },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+            )
         }
     }
 
@@ -157,28 +247,45 @@ private fun TaskRow(
     projectName: String?,
     onToggle: () -> Unit,
     onDelete: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
+    val scheme = MaterialTheme.colorScheme
     val due = WeekUtils.toLocalDateTime(task.dueAt)
-    val alarmText = task.alarmOffsetMinutes?.let { " | آلارم" } ?: ""
+    val hasAlarm = task.alarmOffsetMinutes != null
     val dueLabel = "${WeekUtils.persianDayName(due.dayOfWeek)} ${WeekUtils.dateText(due.toLocalDate())} - " +
         due.format(WeekUtils.TIME_FMT)
-    val suffix = (projectName?.let { " | $it" } ?: "") + alarmText
 
-    AppCard(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Checkbox(checked = task.isDone, onCheckedChange = { onToggle() })
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    task.title,
-                    style = MaterialTheme.typography.bodyLarge,
-                    textDecoration = if (task.isDone) TextDecoration.LineThrough else null,
-                )
-                Text(dueLabel + suffix, style = MaterialTheme.typography.bodySmall)
+    PillRow(
+        modifier = modifier,
+        leading = { CheckCircle(checked = task.isDone, onCheckedChange = { onToggle() }) },
+        trailing = { DeleteIconButton(onClick = onDelete) },
+    ) {
+        Text(
+            text = task.title,
+            style = MaterialTheme.typography.titleMedium,
+            color = if (task.isDone) scheme.onSurfaceVariant else scheme.onSurface,
+            textDecoration = if (task.isDone) TextDecoration.LineThrough else TextDecoration.None,
+            maxLines = 1,
+        )
+        Text(
+            text = dueLabel,
+            style = MaterialTheme.typography.bodySmall,
+            color = scheme.onSurfaceVariant,
+            maxLines = 1,
+        )
+        if (projectName != null || hasAlarm) {
+            Spacer(Modifier.height(4.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (projectName != null) {
+                    TagText(text = projectName, icon = R.drawable.ic_tb_folder)
+                }
+                if (hasAlarm) {
+                    TagText(text = "آلارم", icon = R.drawable.ic_tb_bell, color = scheme.primary)
+                }
             }
-            TextButton(onClick = onDelete) { Text("حذف") }
         }
     }
 }
@@ -202,17 +309,18 @@ private fun AddTaskDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(32.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
         title = { Text("تسک جدید") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
+                AppTextField(
                     value = title,
                     onValueChange = {
                         title = it
                         onEdit()
                     },
-                    label = { Text("عنوان تسک") },
-                    singleLine = true,
+                    label = "عنوان تسک",
                     modifier = Modifier.fillMaxWidth(),
                 )
 
@@ -230,14 +338,13 @@ private fun AddTaskDialog(
                     }
                 }
 
-                OutlinedTextField(
+                AppTextField(
                     value = time,
                     onValueChange = {
                         time = it
                         onEdit()
                     },
-                    label = { Text("ساعت (HH:mm)") },
-                    singleLine = true,
+                    label = "ساعت (HH:mm)",
                     modifier = Modifier.fillMaxWidth(),
                 )
 
@@ -255,14 +362,13 @@ private fun AddTaskDialog(
                     }
                 }
                 if (repeat != RepeatType.NONE) {
-                    OutlinedTextField(
+                    AppTextField(
                         value = untilText,
                         onValueChange = {
                             untilText = it
                             onEdit()
                         },
-                        label = { Text("پایان تکرار (مثل ۱۴۰۵/۰۸/۱۰)") },
-                        singleLine = true,
+                        label = "پایان تکرار (مثل ۱۴۰۵/۰۸/۱۰)",
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
@@ -311,12 +417,19 @@ private fun AddTaskDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { onSave(title, day, time, projectId, repeat, untilText, alarm.offsetMinutes) }) {
-                Text("ذخیره")
-            }
+            PillButton(
+                text = "ذخیره",
+                onClick = { onSave(title, day, time, projectId, repeat, untilText, alarm.offsetMinutes) },
+                modifier = Modifier.height(52.dp),
+            )
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("انصراف") }
+            PillButton(
+                text = "انصراف",
+                onClick = onDismiss,
+                modifier = Modifier.height(52.dp),
+                outlined = true,
+            )
         },
     )
 }

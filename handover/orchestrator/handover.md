@@ -1,34 +1,18 @@
 # Handover - iCoordinator UI redesign
 
-Prompt version: Orchestrator v6.8 - Last updated: 2026-11-03 - Mode: Auto - Path: Lite
+Prompt version: Orchestrator v6.8 - Last updated: 2026-11-06 12:40 - Mode: Auto - Path: Lite
 
 ## In one minute
-Last time: user accepted the plan (B: UI code change plus one test version; Auto mode). User connected the ui folder.
-Now: launch L1 (T01 theme and shared components) is being prepared.
-Next: review T01, then launch L2 (T02 to T05), then copy results to the project after a backup.
-
-## Goal
-Better UI for iCoordinator, one version the user can test. Keep behaviour. Report what works.
-
-## Where we are
-Stop: sprint 1 plan approved (by "پیشنهادات خوبه").
-Files staged to /mnt/user-data/uploads/icoordinator/ui and /mnt/user-data/uploads/iCoordinator/app/...
-
-## Decisions that shape the remaining work
-- D1 to D6, F1 to F6 in decisions.md.
+Last time: round-1 UI (T01-T05, 2026-11-03) was applied and built; user called it terrible (screenshots 2026-11-06).
+Now: T06 made an HTML mockup + screenshots + Compose spec. v1 (Material teal) shown; user sent a reference app for style; v2 in that style shown, waiting for approval.
+Next: on approval, plan Compose rewrite (theme+shared components+bottom bar first, then screens) from outputs/T06/v2/spec.md; back up ui/ before writing (approval gate).
 
 ## Waiting on the user
-- Q1: list of items already tested and their result (for the working/not working report).
-
-## Tasks
-Counts: pending 5. Unfinished: T01 to T05 (see task-board.md).
-
-## Metrics so far
-Questions asked: 2 - Flags: 6 open (default chosen) - Escalations: 0 - Launches: 0
+- Approve v2 or list changes; accent colour (teal vs warm); nav order with weekly log in the raised centre.
+- Q1 (old): which items were tested before, and their result.
 
 ## Files
-ledger.md, decisions.md, task-board.md, handover.md (in /mnt/user-data/outputs/orchestrator/)
-Checks: /mnt/user-data/outputs/checks/kt_check.py (brackets and public signatures)
+State: handover/orchestrator/ (ledger, decisions D1-D11, task-board, handover). Mockup: handover/mockup/ (v1, v2, spec.md).
 
 ## How to resume
 Start a new session with the Orchestrator skill (v6.8 or later).

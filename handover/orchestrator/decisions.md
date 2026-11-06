@@ -20,3 +20,13 @@
 
 ## Calibration log
 - none yet (first sprint).
+
+## Session 2026-11-06 (UI redesign, round 2)
+- D7: Icons allowed, core set only (material-icons-core comes with material3 1.3 via compose-bom 2024.09.00; no new dependency). Nav: Home, List, Refresh, DateRange, Star. Replaces F1. Reason: user said the UI "has almost no UI elements" (2026-11-06).
+- D8: Exact-alarm banner becomes a compact card on the weekly log screen only (shown only when permission missing). Pending user approval via mockup.
+- D9: Every screen gets a TopAppBar with title; project detail has a back arrow. Pending user approval via mockup.
+- D10: Flow: HTML mockup + screenshots first (T06), user approves, then Compose rewrite. Source: user "قبل از پابلیش یه اسکرین شات نشونم بده".
+- Note: phone screenshots show blue/lavender colours, not the teal in Theme.kt; open question Q2 whether the phone build is older than the 2026-11-03 code.
+- D11 (2026-11-06): User sent a reference app's screenshots: "یه همچین چیزی میتونی بسازی؟ فقط رابط کاربریشو در نظر بگیر نه context رو". T06 revision 1 = v2 mockup in that style (outlined pill rows, round icon circles, big titles, gradient hero on weekly log, raised centre nav item = weekly log, outline icons). Accent stays teal; no branding of the reference app copied. Nav order change and teal accent are flags for the user.
+- D12 (2026-11-06): Font Vazirmatn v33.003 (OFL), Farsi-Digits (FD) variant so numbers show as Persian digits (user answer 2A). Files in inputs/fonts; will be bundled in res/font.
+- D13 (2026-11-06): Icons Tabler 3.50.0 outline (MIT), imported per icon as vector drawables (no library). Replaces D7's core-icon limit.
