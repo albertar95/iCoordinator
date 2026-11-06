@@ -17,6 +17,16 @@ android {
         versionName = "0.1.0"
     }
 
+    // ثابت: همه‌ی بیلدها (GitHub Actions و محلی) با یک کلید امضا می‌شوند تا آپدیت روی گوشی ممکن باشد
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("signing/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
