@@ -12,11 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,16 +32,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.icoordinator.ICoordinatorApp
 import com.icoordinator.R
-import com.icoordinator.data.entity.ProjectEntity
 import com.icoordinator.data.entity.TaskEntity
-import com.icoordinator.domain.ALARM_OPTIONS
-import com.icoordinator.domain.AlarmOption
-import com.icoordinator.domain.PersianCalendar
-import com.icoordinator.domain.RepeatType
 import com.icoordinator.domain.WeekUtils
-import com.icoordinator.ui.components.AppTextField
 import com.icoordinator.ui.components.CheckCircle
 import com.icoordinator.ui.components.ConfirmDeleteDialog
+import com.icoordinator.ui.components.ContributionDialog
 import com.icoordinator.ui.components.DeleteIconButton
 import com.icoordinator.ui.components.EmptyState
 import com.icoordinator.ui.components.PageHeader
@@ -55,9 +46,9 @@ import com.icoordinator.ui.components.ProgressLine
 import com.icoordinator.ui.components.QuickAction
 import com.icoordinator.ui.components.SectionLabel
 import com.icoordinator.ui.components.TagText
+import com.icoordinator.ui.components.TaskFormDialog
 import com.icoordinator.ui.openExactAlarmSettings
 import com.icoordinator.ui.rememberExactAlarmAllowed
-import java.time.LocalDate
 
 @Composable
 fun WeeklyLogScreen() {
@@ -70,8 +61,11 @@ fun WeeklyLogScreen() {
     val weekStart by vm.weekStart.collectAsStateWithLifecycle()
     val tasks by vm.tasksOfWeek.collectAsStateWithLifecycle()
     val projects by vm.projectList.collectAsStateWithLifecycle()
-    val error by vm.error.collectAsStateWithLifecycle()
+    val goals by vm.goals.collectAsStateWithLifecycle()
+    val goalProgress by vm.goalProgress.collectAsStateWithLifecycle()
     var showAdd by remember { mutableStateOf(false) }
+    var taskToEdit by remember { mutableStateOf<TaskEntity?>(null) }
+    var taskToTick by remember { mutableStateOf<TaskEntity?>(null) }
     var taskToDelete by remember { mutableStateOf<TaskEntity?>(null) }
 
     val context = LocalContext.current
@@ -79,6 +73,7 @@ fun WeeklyLogScreen() {
     val scheme = MaterialTheme.colorScheme
 
     val projectNames = projects.associate { it.id to it.title }
+    val goalsById = goals.associateBy { it.id }
     val weekEnd = weekStart.plusDays(6)
     val doneCount = tasks.count { it.isDone }
     val donePercent = if (tasks.isEmpty()) 0 else doneCount * 100 / tasks.size
@@ -203,7 +198,17 @@ fun WeeklyLogScreen() {
             TaskRow(
                 task = task,
                 projectName = task.projectId?.let { projectNames[it] },
-                onToggle = { vm.toggleTask(task) },
+                goalName = task.goalId?.let { goalsById[it]?.title },
+                onClick = { taskToEdit = task },
+                onToggle = {
+                    if (task.isDone) {
+                        vm.setDone(task, false, null)
+                    } else if (task.goalId?.let { goalsById[it] } != null) {
+                        taskToTick = task
+                    } else {
+                        vm.setDone(task, true, null)
+                    }
+                },
                 onDelete = { taskToDelete = task },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -213,19 +218,47 @@ fun WeeklyLogScreen() {
     }
 
     if (showAdd) {
-        AddTaskDialog(
+        TaskFormDialog(
             weekStart = weekStart,
             projects = projects,
-            errorText = error,
-            onEdit = { vm.clearError() },
-            onDismiss = {
-                vm.clearError()
+            goals = goals,
+            onDismiss = { showAdd = false },
+            onSave = { r ->
+                vm.addTask(r)
                 showAdd = false
             },
-            onSave = { title, day, time, projectId, repeat, until, alarm ->
-                if (vm.addTask(title, day, time, projectId, repeat, until, alarm)) showAdd = false
-            },
         )
+    }
+
+    val editing = taskToEdit
+    if (editing != null) {
+        TaskFormDialog(
+            weekStart = weekStart,
+            projects = projects,
+            goals = goals,
+            onDismiss = { taskToEdit = null },
+            onSave = { r ->
+                vm.updateTask(editing, r)
+                taskToEdit = null
+            },
+            initial = editing,
+        )
+    }
+
+    val pendingTick = taskToTick
+    if (pendingTick != null) {
+        val tickGoal = pendingTick.goalId?.let { goalsById[it] }
+        if (tickGoal != null) {
+            ContributionDialog(
+                goalTitle = tickGoal.title,
+                currentProgress = goalProgress[tickGoal.id] ?: 0,
+                onDismiss = { taskToTick = null },
+                onConfirm = { value ->
+                    vm.setDone(pendingTick, true, value)
+                    taskToTick = null
+                },
+            )
+        }
     }
 
     val pendingDelete = taskToDelete
@@ -245,6 +278,8 @@ fun WeeklyLogScreen() {
 private fun TaskRow(
     task: TaskEntity,
     projectName: String?,
+    goalName: String?,
+    onClick: () -> Unit,
     onToggle: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier,
@@ -257,6 +292,7 @@ private fun TaskRow(
 
     PillRow(
         modifier = modifier,
+        onClick = onClick,
         leading = { CheckCircle(checked = task.isDone, onCheckedChange = { onToggle() }) },
         trailing = { DeleteIconButton(onClick = onDelete) },
     ) {
@@ -273,7 +309,7 @@ private fun TaskRow(
             color = scheme.onSurfaceVariant,
             maxLines = 1,
         )
-        if (projectName != null || hasAlarm) {
+        if (projectName != null || goalName != null || hasAlarm) {
             Spacer(Modifier.height(4.dp))
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -282,154 +318,13 @@ private fun TaskRow(
                 if (projectName != null) {
                     TagText(text = projectName, icon = R.drawable.ic_tb_folder)
                 }
+                if (goalName != null) {
+                    TagText(text = goalName, icon = R.drawable.ic_tb_check, color = scheme.primary)
+                }
                 if (hasAlarm) {
                     TagText(text = "آلارم", icon = R.drawable.ic_tb_bell, color = scheme.primary)
                 }
             }
         }
     }
-}
-
-@Composable
-private fun AddTaskDialog(
-    weekStart: LocalDate,
-    projects: List<ProjectEntity>,
-    errorText: String?,
-    onEdit: () -> Unit,
-    onDismiss: () -> Unit,
-    onSave: (String, LocalDate, String, Long?, RepeatType, String, Int?) -> Unit,
-) {
-    var title by remember { mutableStateOf("") }
-    var day by remember { mutableStateOf(weekStart) }
-    var time by remember { mutableStateOf("09:00") }
-    var projectId by remember { mutableStateOf<Long?>(null) }
-    var repeat by remember { mutableStateOf(RepeatType.NONE) }
-    var untilText by remember { mutableStateOf("") }
-    var alarm: AlarmOption by remember { mutableStateOf(ALARM_OPTIONS[0]) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        shape = RoundedCornerShape(32.dp),
-        containerColor = MaterialTheme.colorScheme.surface,
-        title = { Text("تسک جدید") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                AppTextField(
-                    value = title,
-                    onValueChange = {
-                        title = it
-                        onEdit()
-                    },
-                    label = "عنوان تسک",
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                Text("روز", style = MaterialTheme.typography.bodySmall)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(WeekUtils.weekDays(weekStart)) { d ->
-                        FilterChip(
-                            selected = d == day,
-                            onClick = {
-                                day = d
-                                onEdit()
-                            },
-                            label = { Text("${WeekUtils.persianDayName(d.dayOfWeek)} ${PersianCalendar.toJalali(d).day}") },
-                        )
-                    }
-                }
-
-                AppTextField(
-                    value = time,
-                    onValueChange = {
-                        time = it
-                        onEdit()
-                    },
-                    label = "ساعت (HH:mm)",
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                Text("تکرار", style = MaterialTheme.typography.bodySmall)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(RepeatType.values().toList()) { type ->
-                        FilterChip(
-                            selected = repeat == type,
-                            onClick = {
-                                repeat = type
-                                onEdit()
-                            },
-                            label = { Text(type.label) },
-                        )
-                    }
-                }
-                if (repeat != RepeatType.NONE) {
-                    AppTextField(
-                        value = untilText,
-                        onValueChange = {
-                            untilText = it
-                            onEdit()
-                        },
-                        label = "پایان تکرار (مثل ۱۴۰۵/۰۸/۱۰)",
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-
-                Text("آلارم", style = MaterialTheme.typography.bodySmall)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(ALARM_OPTIONS) { option ->
-                        FilterChip(
-                            selected = alarm == option,
-                            onClick = {
-                                alarm = option
-                                onEdit()
-                            },
-                            label = { Text(option.label) },
-                        )
-                    }
-                }
-
-                Text("پروژه (اختیاری)", style = MaterialTheme.typography.bodySmall)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    item {
-                        FilterChip(
-                            selected = projectId == null,
-                            onClick = {
-                                projectId = null
-                                onEdit()
-                            },
-                            label = { Text("بدون پروژه") },
-                        )
-                    }
-                    items(projects) { p ->
-                        FilterChip(
-                            selected = projectId == p.id,
-                            onClick = {
-                                projectId = p.id
-                                onEdit()
-                            },
-                            label = { Text(p.title) },
-                        )
-                    }
-                }
-
-                errorText?.let {
-                    Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        },
-        confirmButton = {
-            PillButton(
-                text = "ذخیره",
-                onClick = { onSave(title, day, time, projectId, repeat, untilText, alarm.offsetMinutes) },
-                modifier = Modifier.height(52.dp),
-            )
-        },
-        dismissButton = {
-            PillButton(
-                text = "انصراف",
-                onClick = onDismiss,
-                modifier = Modifier.height(52.dp),
-                outlined = true,
-            )
-        },
-    )
 }

@@ -39,7 +39,7 @@ import com.icoordinator.ui.components.ProgressLine
 @Composable
 fun ProjectsScreen(onOpenProject: (Long) -> Unit) {
     val vm: ProjectsViewModel = viewModel(key = "projects") {
-        ProjectsViewModel(ICoordinatorApp.instance.projectRepository)
+        ProjectsViewModel(ICoordinatorApp.instance.projectRepository, ICoordinatorApp.instance.taskRepository)
     }
     val projects by vm.projects.collectAsStateWithLifecycle()
     var showCreate by remember { mutableStateOf(false) }

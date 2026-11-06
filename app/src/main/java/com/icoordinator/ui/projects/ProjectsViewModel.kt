@@ -3,6 +3,7 @@ package com.icoordinator.ui.projects
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.icoordinator.data.ProjectRepository
+import com.icoordinator.data.TaskRepository
 import com.icoordinator.data.entity.GoalEntity
 import com.icoordinator.data.entity.ProjectEntity
 import com.icoordinator.domain.ProgressCalculator
@@ -15,13 +16,16 @@ import kotlinx.coroutines.launch
 
 data class ProjectSummary(val project: ProjectEntity, val progress: Int)
 
-class ProjectsViewModel(private val repo: ProjectRepository) : ViewModel() {
+class ProjectsViewModel(
+    private val repo: ProjectRepository,
+    tasks: TaskRepository,
+) : ViewModel() {
 
     val projects: StateFlow<List<ProjectSummary>> =
-        combine(repo.observeProjects(), repo.observeAllGoals()) { projects, goals ->
+        combine(repo.observeProjects(), repo.observeAllGoals(), tasks.observeWithGoal()) { projects, goals, goalTasks ->
             val byProject = goals.groupBy { it.projectId }
             projects.map { p ->
-                ProjectSummary(p, ProgressCalculator.progress(byProject[p.id] ?: emptyList()))
+                ProjectSummary(p, ProgressCalculator.projectProgress(byProject[p.id] ?: emptyList(), goalTasks))
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
@@ -37,6 +41,7 @@ class ProjectsViewModel(private val repo: ProjectRepository) : ViewModel() {
 
 class ProjectDetailViewModel(
     private val repo: ProjectRepository,
+    tasks: TaskRepository,
     private val projectId: Long,
 ) : ViewModel() {
 
@@ -46,9 +51,16 @@ class ProjectDetailViewModel(
     val goals: StateFlow<List<GoalEntity>> =
         repo.observeGoals(projectId).stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /** پیشرفت هر هدف (شناسه‌ی هدف به درصد). */
+    val goalProgress: StateFlow<Map<Long, Int>> =
+        combine(goals, tasks.observeWithGoal()) { goalList, goalTasks ->
+            goalList.associate { it.id to ProgressCalculator.goalProgress(it, goalTasks) }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
     val progress: StateFlow<Int> =
-        goals.map { ProgressCalculator.progress(it) }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+        combine(goals, tasks.observeWithGoal()) { goalList, goalTasks ->
+            ProgressCalculator.projectProgress(goalList, goalTasks)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     val remaining: StateFlow<Int> =
         goals.map { ProgressCalculator.remaining(it.sumOf { g -> g.weightPercent }) }
@@ -58,12 +70,21 @@ class ProjectDetailViewModel(
     private val _error = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error
 
-    fun addGoal(title: String, weight: Int) {
+    /** onSuccess فقط وقتی صدا زده می‌شود که هدف ذخیره شده باشد. */
+    fun addGoal(title: String, weight: Int, onSuccess: () -> Unit = {}) {
         if (title.isBlank()) {
             _error.value = "عنوان هدف را وارد کن"
             return
         }
-        viewModelScope.launch { _error.value = repo.addGoal(projectId, title, weight) }
+        viewModelScope.launch {
+            val message = repo.addGoal(projectId, title, weight)
+            _error.value = message
+            if (message == null) onSuccess()
+        }
+    }
+
+    fun reorderGoals(ordered: List<GoalEntity>) {
+        viewModelScope.launch { repo.reorderGoals(ordered) }
     }
 
     fun clearError() {

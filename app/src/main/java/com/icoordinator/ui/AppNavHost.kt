@@ -15,6 +15,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.icoordinator.ui.calendar.CalendarScreen
+import com.icoordinator.ui.goals.GoalScreen
 import com.icoordinator.ui.projects.ProjectDetailScreen
 import com.icoordinator.ui.projects.ProjectsScreen
 import com.icoordinator.ui.report.ReportScreen
@@ -25,12 +26,15 @@ import com.icoordinator.ui.weekly.WeeklyLogScreen
 object Routes {
     const val PROJECTS = "projects"
     const val PROJECT_DETAIL = "project/{id}"
+    const val GOAL_DETAIL = "goal/{id}"
     const val WEEKLY_LOG = "weekly_log"
     const val ROUTINES = "routines"
     const val CALENDAR = "calendar"
     const val REPORT = "report"
 
     fun projectDetail(id: Long) = "project/$id"
+
+    fun goalDetail(id: Long) = "goal/$id"
 }
 
 @Composable
@@ -38,7 +42,7 @@ fun AppNavHost() {
     val navController = rememberNavController()
     val backStack by navController.currentBackStackEntryAsState()
     val current = backStack?.destination?.route
-    val onDetail = current == Routes.PROJECT_DETAIL
+    val onDetail = current == Routes.PROJECT_DETAIL || current == Routes.GOAL_DETAIL
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -74,7 +78,18 @@ fun AppNavHost() {
                 arguments = listOf(navArgument("id") { type = NavType.LongType }),
             ) { entry ->
                 val id = entry.arguments?.getLong("id") ?: return@composable
-                ProjectDetailScreen(projectId = id, onBack = { navController.popBackStack() })
+                ProjectDetailScreen(
+                    projectId = id,
+                    onBack = { navController.popBackStack() },
+                    onOpenGoal = { gid -> navController.navigate(Routes.goalDetail(gid)) },
+                )
+            }
+            composable(
+                Routes.GOAL_DETAIL,
+                arguments = listOf(navArgument("id") { type = NavType.LongType }),
+            ) { entry ->
+                val id = entry.arguments?.getLong("id") ?: return@composable
+                GoalScreen(goalId = id, onBack = { navController.popBackStack() })
             }
             composable(Routes.WEEKLY_LOG) { WeeklyLogScreen() }
             composable(Routes.ROUTINES) { RoutinesScreen() }

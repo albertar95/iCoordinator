@@ -57,3 +57,17 @@ Change list: changes.md (C1-C8). User "go" at 14:41 accepted the recommendations
 - F14: Deleting a goal sets its tasks' goalId to null (tasks kept), same as project delete.
 - F15: Date picker is a custom Shamsi month grid (Material DatePicker is Gregorian only); time picker is Material3 TimePicker, 24h.
 - D26: No compiler in Claude's workspace; validations are static scripts; the build check is GitHub Actions after the user runs push.bat.
+
+## Phase 2, sprints 2-3 (2026-11-06, 15:13-)
+- D28 (15:13): User: "do all sprints, ask nothing, go with your recommendations; tell me when to push and test." Ask-first tasks (T27) ran as Flag-and-continue with the defaults below; this message also approved overwriting the screen files (backups in handover/backup-sprint2-2026-11-06/) and the sprint 3 security/manifest changes.
+- D29: PIN hash = PBKDF2WithHmacSHA256, 16-byte salt, 60000 iterations, 256-bit; prefs "app_lock"; MessageDigest.isEqual.
+- D30: 5 wrong PINs -> 30 s lockout.
+- D31: Forgot PIN = ActivityManager.clearApplicationUserData() after a confirmation dialog (wipes DB, prefs, alarms; app closes).
+- D32: First launch with no PIN shows mandatory PIN setup; change PIN from the lock screen ("تغییر رمز").
+- D33: Lock state is process-wide (rotation does not re-lock); background timeout measured with SystemClock.elapsedRealtime (review R1-03).
+- D34: manifest allowBackup=false (orchestrator edit).
+- D35: New non-repeating task preselects today when today is in the shown week (orchestrator minor fix to T21 F1).
+- F16: Tasks created from the goal screen use the current week (weekStart of today).
+- F17: Calendar view switch Month/Week/Day chips; week = Saturday-start week of the selected day; day = selected day.
+- Accepted flags: T21 F2-F5; T27 F1-F6 (LTR keypad, cancel in change-PIN, rotation resets PIN entry); T22 F1-F4 (progress card stays above manifest); T23 F1-F4 (delete on goal task rows); T24 F1-F3; T25 F1-F3 (routine default time 08:00; "بدون پایان" chip); T26 F1-F5.
+- Review R1 (Sonnet, reading review, no compiler): no compile error found. Fixed: R1-01 drag reorder used stale state (could undo a just-ticked goal), R1-02 contribution input dropped Persian digits, R1-03 clock, R1-05 "not found" flicker. Open (Low): R1-04 calendar loads a wide range after paging many months; R1-06 add-goal blank-title error shows under the percent field.

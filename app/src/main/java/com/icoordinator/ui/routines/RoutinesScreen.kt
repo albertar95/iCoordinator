@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -27,20 +29,26 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.icoordinator.ICoordinatorApp
 import com.icoordinator.R
 import com.icoordinator.data.entity.RoutineEntity
-import com.icoordinator.domain.PersianCalendar
 import com.icoordinator.domain.RoutineUtils
 import com.icoordinator.domain.WeekUtils
 import com.icoordinator.ui.components.AppTextField
 import com.icoordinator.ui.components.ConfirmDeleteDialog
+import com.icoordinator.ui.components.DateField
 import com.icoordinator.ui.components.DeleteIconButton
 import com.icoordinator.ui.components.EmptyState
 import com.icoordinator.ui.components.IconCircle
 import com.icoordinator.ui.components.PageHeader
 import com.icoordinator.ui.components.PillButton
 import com.icoordinator.ui.components.PillRow
+import com.icoordinator.ui.components.ShamsiDatePickerDialog
 import com.icoordinator.ui.components.TagText
+import com.icoordinator.ui.components.TimeField
+import com.icoordinator.ui.components.TimePickerDialog24
 import java.time.DayOfWeek
 import java.time.LocalDate
+import java.time.LocalTime
+
+private val DEFAULT_TIME: LocalTime = LocalTime.of(8, 0)
 
 /** روزهای هفته به ترتیب شنبه تا جمعه */
 private val WEEK_ORDER = listOf(
@@ -56,6 +64,7 @@ fun RoutinesScreen() {
     val routines by vm.routines.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
     var showAdd by remember { mutableStateOf(false) }
+    var routineToEdit by remember { mutableStateOf<RoutineEntity?>(null) }
     var routineToDelete by remember { mutableStateOf<RoutineEntity?>(null) }
 
     Column(
@@ -92,6 +101,10 @@ fun RoutinesScreen() {
                 items(routines, key = { it.id }) { routine ->
                     PillRow(
                         modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            vm.clearError()
+                            routineToEdit = routine
+                        },
                         leading = { IconCircle(icon = R.drawable.ic_tb_repeat) },
                         trailing = { DeleteIconButton(onClick = { routineToDelete = routine }) },
                     ) {
@@ -119,16 +132,27 @@ fun RoutinesScreen() {
         }
     }
 
-    if (showAdd) {
-        AddRoutineDialog(
+    val editing = routineToEdit
+    if (showAdd || editing != null) {
+        RoutineFormDialog(
+            initial = editing,
             errorText = error,
             onEdit = { vm.clearError() },
             onDismiss = {
                 vm.clearError()
                 showAdd = false
+                routineToEdit = null
             },
             onSave = { title, days, time, start, end ->
-                if (vm.addRoutine(title, days, time, start, end)) showAdd = false
+                val saved = if (editing == null) {
+                    vm.addRoutine(title, days, time, start, end)
+                } else {
+                    vm.updateRoutine(editing, title, days, time, start, end)
+                }
+                if (saved) {
+                    showAdd = false
+                    routineToEdit = null
+                }
             },
         )
     }
@@ -147,25 +171,40 @@ fun RoutinesScreen() {
 }
 
 @Composable
-private fun AddRoutineDialog(
+private fun RoutineFormDialog(
+    initial: RoutineEntity?,
     errorText: String?,
     onEdit: () -> Unit,
     onDismiss: () -> Unit,
-    onSave: (String, Set<DayOfWeek>, String, String, String) -> Unit,
+    onSave: (String, Set<DayOfWeek>, LocalTime, LocalDate, LocalDate?) -> Unit,
 ) {
-    var title by remember { mutableStateOf("") }
-    var days by remember { mutableStateOf(setOf<DayOfWeek>()) }
-    var time by remember { mutableStateOf("07:00") }
-    var startText by remember { mutableStateOf(PersianCalendar.format(LocalDate.now())) }
-    var endText by remember { mutableStateOf("") }
+    var title by remember(initial?.id) { mutableStateOf(initial?.title ?: "") }
+    var days by remember(initial?.id) {
+        mutableStateOf(initial?.let { RoutineUtils.daysOf(it.daysMask).toSet() } ?: setOf<DayOfWeek>())
+    }
+    var time by remember(initial?.id) {
+        mutableStateOf(initial?.let { WeekUtils.parseTime(it.timeOfDay) } ?: DEFAULT_TIME)
+    }
+    var startDate by remember(initial?.id) {
+        mutableStateOf(initial?.let { LocalDate.ofEpochDay(it.startDay) } ?: LocalDate.now())
+    }
+    var endDate by remember(initial?.id) {
+        mutableStateOf<LocalDate?>(initial?.endDay?.let { LocalDate.ofEpochDay(it) })
+    }
+    var showStartPicker by remember { mutableStateOf(false) }
+    var showEndPicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(32.dp),
         containerColor = MaterialTheme.colorScheme.surface,
-        title = { Text("روتین جدید") },
+        title = { Text(if (initial == null) "روتین جدید" else "ویرایش روتین") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 AppTextField(
                     value = title,
                     onValueChange = {
@@ -190,32 +229,31 @@ private fun AddRoutineDialog(
                     }
                 }
 
-                AppTextField(
-                    value = time,
-                    onValueChange = {
-                        time = it
-                        onEdit()
-                    },
-                    label = "ساعت (HH:mm)",
+                TimeField(
+                    label = "ساعت",
+                    time = time,
+                    onClick = { showTimePicker = true },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                AppTextField(
-                    value = startText,
-                    onValueChange = {
-                        startText = it
-                        onEdit()
-                    },
-                    label = "تاریخ شروع (مثل ۱۴۰۵/۰۸/۱۰)",
+                DateField(
+                    label = "تاریخ شروع",
+                    date = startDate,
+                    onClick = { showStartPicker = true },
                     modifier = Modifier.fillMaxWidth(),
                 )
-                AppTextField(
-                    value = endText,
-                    onValueChange = {
-                        endText = it
+                DateField(
+                    label = "تاریخ پایان (اختیاری)",
+                    date = endDate,
+                    onClick = { showEndPicker = true },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                FilterChip(
+                    selected = endDate == null,
+                    onClick = {
+                        endDate = null
                         onEdit()
                     },
-                    label = "تاریخ پایان (خالی = بدون پایان)",
-                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("بدون پایان") },
                 )
 
                 errorText?.let {
@@ -226,7 +264,7 @@ private fun AddRoutineDialog(
         confirmButton = {
             PillButton(
                 text = "ذخیره",
-                onClick = { onSave(title, days, time, startText, endText) },
+                onClick = { onSave(title, days, time, startDate, endDate) },
                 modifier = Modifier.height(52.dp),
             )
         },
@@ -239,4 +277,38 @@ private fun AddRoutineDialog(
             )
         },
     )
+
+    if (showTimePicker) {
+        TimePickerDialog24(
+            initial = time,
+            onDismiss = { showTimePicker = false },
+            onPick = {
+                time = it
+                showTimePicker = false
+                onEdit()
+            },
+        )
+    }
+    if (showStartPicker) {
+        ShamsiDatePickerDialog(
+            initial = startDate,
+            onDismiss = { showStartPicker = false },
+            onPick = {
+                startDate = it
+                showStartPicker = false
+                onEdit()
+            },
+        )
+    }
+    if (showEndPicker) {
+        ShamsiDatePickerDialog(
+            initial = endDate ?: startDate,
+            onDismiss = { showEndPicker = false },
+            onPick = {
+                endDate = it
+                showEndPicker = false
+                onEdit()
+            },
+        )
+    }
 }
