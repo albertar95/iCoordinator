@@ -37,6 +37,10 @@ class ProjectsViewModel(
     fun deleteProject(project: ProjectEntity) {
         viewModelScope.launch { repo.deleteProject(project) }
     }
+
+    fun reorderProjects(ordered: List<ProjectEntity>) {
+        viewModelScope.launch { repo.reorderProjects(ordered) }
+    }
 }
 
 class ProjectDetailViewModel(

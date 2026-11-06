@@ -18,9 +18,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.icoordinator.ICoordinatorApp
@@ -44,6 +54,15 @@ fun ProjectsScreen(onOpenProject: (Long) -> Unit) {
     val projects by vm.projects.collectAsStateWithLifecycle()
     var showCreate by remember { mutableStateOf(false) }
     var projectToDelete by remember { mutableStateOf<ProjectEntity?>(null) }
+
+    // Local order used while dragging; it is replaced whenever the stored projects change.
+    var order by remember { mutableStateOf(projects) }
+    val storedProjects by rememberUpdatedState(projects)
+    var draggingId by remember { mutableStateOf<Long?>(null) }
+    var dragOffset by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(projects) { if (draggingId == null) order = projects }
+    val rowHeights = remember { mutableStateMapOf<Long, Int>() }
+    val gapPx = with(LocalDensity.current) { 12.dp.toPx() }
 
     Column(
         modifier = Modifier
@@ -75,9 +94,58 @@ fun ProjectsScreen(onOpenProject: (Long) -> Unit) {
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(projects, key = { it.project.id }) { summary ->
+                items(order, key = { it.project.id }) { summary ->
+                    val projectId = summary.project.id
+                    val dragging = draggingId == projectId
                     PillRow(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .onGloballyPositioned { rowHeights[projectId] = it.size.height }
+                            .zIndex(if (dragging) 1f else 0f)
+                            .graphicsLayer { translationY = if (dragging) dragOffset else 0f }
+                            // long-press then drag reorders (same pattern as goals)
+                            .pointerInput(projectId) {
+                                detectDragGesturesAfterLongPress(
+                                    onDragStart = {
+                                        draggingId = projectId
+                                        dragOffset = 0f
+                                    },
+                                    onDrag = { change, amount ->
+                                        change.consume()
+                                        dragOffset += amount.y
+                                        val index = order.indexOfFirst { it.project.id == projectId }
+                                        if (index >= 0) {
+                                            if (dragOffset > 0f && index < order.lastIndex) {
+                                                val step = (rowHeights[order[index + 1].project.id] ?: 0) + gapPx
+                                                if (step > 0f && dragOffset > step / 2f) {
+                                                    val moved = order.toMutableList()
+                                                    moved.add(index + 1, moved.removeAt(index))
+                                                    order = moved
+                                                    dragOffset -= step
+                                                }
+                                            } else if (dragOffset < 0f && index > 0) {
+                                                val step = (rowHeights[order[index - 1].project.id] ?: 0) + gapPx
+                                                if (step > 0f && -dragOffset > step / 2f) {
+                                                    val moved = order.toMutableList()
+                                                    moved.add(index - 1, moved.removeAt(index))
+                                                    order = moved
+                                                    dragOffset += step
+                                                }
+                                            }
+                                        }
+                                    },
+                                    onDragEnd = {
+                                        draggingId = null
+                                        dragOffset = 0f
+                                        vm.reorderProjects(order.map { it.project })
+                                    },
+                                    onDragCancel = {
+                                        draggingId = null
+                                        dragOffset = 0f
+                                        order = storedProjects
+                                    },
+                                )
+                            },
                         onClick = { onOpenProject(summary.project.id) },
                         leading = { LetterCircle(summary.project.title) },
                         trailing = {

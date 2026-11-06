@@ -39,4 +39,11 @@ interface TaskDao {
 
     @Delete
     suspend fun delete(task: TaskEntity)
+
+    /** تسک‌های انجام‌نشده‌ی یک سری تکراری از زمان fromDueAt به بعد (شامل خود آن). */
+    @Query("SELECT * FROM tasks WHERE seriesId = :seriesId AND isDone = 0 AND dueAt >= :fromDueAt")
+    suspend fun undoneInSeriesFrom(seriesId: Long, fromDueAt: Long): List<TaskEntity>
+
+    @Delete
+    suspend fun deleteAll(tasks: List<TaskEntity>)
 }

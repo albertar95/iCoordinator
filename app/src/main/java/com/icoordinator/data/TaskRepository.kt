@@ -38,6 +38,8 @@ class TaskRepository(
     ): Int {
         val clean = title.trim()
         val dates = TaskRules.occurrenceDates(startDate, repeat, until, weekDays)
+        val isSeries = dates.size > 1
+        var seriesId: Long? = null
         dates.forEach { date ->
             val dueAt = WeekUtils.toMillis(LocalDateTime.of(date, time))
             val task = TaskEntity(
@@ -47,8 +49,14 @@ class TaskRepository(
                 projectId = projectId,
                 goalId = goalId,
                 alarmOffsetMinutes = alarmOffset,
+                seriesId = seriesId,
             )
             val id = dao.insert(task)
+            if (isSeries && seriesId == null) {
+                // اولین تکرار: شناسه‌اش شناسه‌ی سری می‌شود
+                seriesId = id
+                dao.update(task.copy(id = id, seriesId = id))
+            }
             alarms.schedule(id, clean, dueAt, alarmOffset)
         }
         return dates.size
@@ -104,5 +112,24 @@ class TaskRepository(
     suspend fun deleteTask(task: TaskEntity) {
         alarms.cancel(task.id)
         dao.delete(task)
+    }
+
+    fun isInSeries(task: TaskEntity): Boolean = task.seriesId != null
+
+    /**
+     * این تکرار و تکرارهای بعدیِ انجام‌نشده‌ی همان سری را حذف می‌کند؛ تسک‌های انجام‌شده هرگز حذف نمی‌شوند.
+     * تعداد ردیف‌های حذف‌شده را برمی‌گرداند.
+     */
+    suspend fun deleteSeriesFrom(task: TaskEntity): Int {
+        val seriesId = task.seriesId
+        if (seriesId == null) {
+            if (task.isDone) return 0
+            deleteTask(task)
+            return 1
+        }
+        val rows = dao.undoneInSeriesFrom(seriesId, task.dueAt)
+        rows.forEach { alarms.cancel(it.id) }
+        dao.deleteAll(rows)
+        return rows.size
     }
 }

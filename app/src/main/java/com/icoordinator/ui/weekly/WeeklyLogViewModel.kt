@@ -79,4 +79,8 @@ class WeeklyLogViewModel(
     fun deleteTask(task: TaskEntity) {
         viewModelScope.launch { tasks.deleteTask(task) }
     }
+
+    fun deleteSeriesFrom(task: TaskEntity) {
+        viewModelScope.launch { tasks.deleteSeriesFrom(task) }
+    }
 }

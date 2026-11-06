@@ -1,5 +1,6 @@
 package com.icoordinator.data.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -8,6 +9,7 @@ import androidx.room.PrimaryKey
  * daysMask: بیت i (از ۰) یعنی روزی با DayOfWeek.value = i+1
  * timeOfDay: ساعت به قالب HH:mm
  * startDay / endDay: epochDay. endDay = null یعنی بدون پایان.
+ * alarmOffsetMinutes: null یعنی بدون آلارم، ۰ یعنی همان ساعت روتین، و عدد مثبت یعنی چند دقیقه قبل
  */
 @Entity(tableName = "routines")
 data class RoutineEntity(
@@ -18,4 +20,5 @@ data class RoutineEntity(
     val startDay: Long,
     val endDay: Long? = null,
     val createdAt: Long = System.currentTimeMillis(),
+    @ColumnInfo(defaultValue = "0") val alarmOffsetMinutes: Int? = 0,
 )

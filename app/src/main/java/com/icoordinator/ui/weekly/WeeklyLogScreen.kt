@@ -35,9 +35,9 @@ import com.icoordinator.R
 import com.icoordinator.data.entity.TaskEntity
 import com.icoordinator.domain.WeekUtils
 import com.icoordinator.ui.components.CheckCircle
-import com.icoordinator.ui.components.ConfirmDeleteDialog
 import com.icoordinator.ui.components.ContributionDialog
 import com.icoordinator.ui.components.DeleteIconButton
+import com.icoordinator.ui.components.DeleteTaskDialog
 import com.icoordinator.ui.components.EmptyState
 import com.icoordinator.ui.components.PageHeader
 import com.icoordinator.ui.components.PillButton
@@ -263,13 +263,17 @@ fun WeeklyLogScreen() {
 
     val pendingDelete = taskToDelete
     if (pendingDelete != null) {
-        ConfirmDeleteDialog(
-            itemName = pendingDelete.title,
-            onConfirm = {
+        DeleteTaskDialog(
+            task = pendingDelete,
+            onDismiss = { taskToDelete = null },
+            onDeleteOne = {
                 vm.deleteTask(pendingDelete)
                 taskToDelete = null
             },
-            onDismiss = { taskToDelete = null },
+            onDeleteSeries = {
+                vm.deleteSeriesFrom(pendingDelete)
+                taskToDelete = null
+            },
         )
     }
 }

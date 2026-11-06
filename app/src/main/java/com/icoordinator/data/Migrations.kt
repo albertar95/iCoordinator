@@ -2,6 +2,7 @@ package com.icoordinator.data
 
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.icoordinator.domain.PersianSort
 
 /** هر تغییر در ساختار دیتابیس باید اینجا یک Migration داشته باشد. */
 object Migrations {
@@ -22,6 +23,37 @@ object Migrations {
     val MIGRATION_5_6: Migration = object : Migration(5, 6) {
         override fun migrate(db: SupportSQLiteDatabase) {
             SQL_5_6.forEach { db.execSQL(it) }
+        }
+    }
+
+    val SQL_6_7: List<String> = listOf(
+        "ALTER TABLE `tasks` ADD COLUMN `seriesId` INTEGER",
+        "CREATE INDEX IF NOT EXISTS `index_tasks_seriesId` ON `tasks` (`seriesId`)",
+        "ALTER TABLE `projects` ADD COLUMN `sortOrder` INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE `routines` ADD COLUMN `alarmOffsetMinutes` INTEGER DEFAULT 0",
+    )
+
+    /** ids of the given (id, title) rows in Persian alphabetical order of title, ties by id. */
+    fun projectOrder(rows: List<Pair<Long, String>>): List<Long> =
+        rows.sortedWith(
+            Comparator<Pair<Long, String>> { a, b ->
+                val c = PersianSort.compare(a.second, b.second)
+                if (c != 0) c else a.first.compareTo(b.first)
+            },
+        ).map { it.first }
+
+    val MIGRATION_6_7: Migration = object : Migration(6, 7) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            SQL_6_7.forEach { db.execSQL(it) }
+            val rows = ArrayList<Pair<Long, String>>()
+            db.query("SELECT id, title FROM projects").use { cursor ->
+                while (cursor.moveToNext()) {
+                    rows.add(Pair(cursor.getLong(0), cursor.getString(1) ?: ""))
+                }
+            }
+            projectOrder(rows).forEachIndexed { order, id ->
+                db.execSQL("UPDATE projects SET sortOrder = ? WHERE id = ?", arrayOf<Any?>(order, id))
+            }
         }
     }
 }

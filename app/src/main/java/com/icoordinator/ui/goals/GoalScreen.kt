@@ -19,8 +19,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,9 +40,9 @@ import com.icoordinator.data.entity.TaskEntity
 import com.icoordinator.domain.WeekUtils
 import com.icoordinator.ui.components.AppTextField
 import com.icoordinator.ui.components.CheckCircle
-import com.icoordinator.ui.components.ConfirmDeleteDialog
 import com.icoordinator.ui.components.ContributionDialog
 import com.icoordinator.ui.components.DeleteIconButton
+import com.icoordinator.ui.components.DeleteTaskDialog
 import com.icoordinator.ui.components.EmptyState
 import com.icoordinator.ui.components.PageHeader
 import com.icoordinator.ui.components.PillButton
@@ -49,6 +51,8 @@ import com.icoordinator.ui.components.ProgressLine
 import com.icoordinator.ui.components.SectionLabel
 import com.icoordinator.ui.components.TaskFormDialog
 import java.time.LocalDate
+
+private const val PAGE_SIZE = 10
 
 @Composable
 fun GoalScreen(goalId: Long, onBack: () -> Unit) {
@@ -86,6 +90,9 @@ fun GoalScreen(goalId: Long, onBack: () -> Unit) {
     var showAddTask by remember { mutableStateOf(false) }
     var taskToDelete by remember { mutableStateOf<TaskEntity?>(null) }
     var taskToTick by remember { mutableStateOf<TaskEntity?>(null) }
+    var shownCount by rememberSaveable(current.id) { mutableIntStateOf(PAGE_SIZE) }
+    val sortedTasks = goalTasks.sortedByDescending { it.dueAt }
+    val visibleTasks = sortedTasks.take(shownCount)
     var titleText by remember(current.id) { mutableStateOf(current.title) }
     var weightText by remember(current.id) { mutableStateOf(current.weightPercent.toString()) }
     val scheme = MaterialTheme.colorScheme
@@ -178,7 +185,7 @@ fun GoalScreen(goalId: Long, onBack: () -> Unit) {
                 }
             }
 
-            items(goalTasks, key = { it.id }) { task ->
+            items(visibleTasks, key = { it.id }) { task ->
                 GoalTaskRow(
                     task = task,
                     onToggle = {
@@ -191,6 +198,17 @@ fun GoalScreen(goalId: Long, onBack: () -> Unit) {
                     onDelete = { taskToDelete = task },
                     modifier = Modifier.fillMaxWidth(),
                 )
+            }
+
+            if (sortedTasks.size > shownCount) {
+                item {
+                    PillButton(
+                        text = "بیشتر",
+                        onClick = { shownCount += PAGE_SIZE },
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        outlined = true,
+                    )
+                }
             }
 
             item {
@@ -234,13 +252,17 @@ fun GoalScreen(goalId: Long, onBack: () -> Unit) {
 
     val pendingDelete = taskToDelete
     if (pendingDelete != null) {
-        ConfirmDeleteDialog(
-            itemName = pendingDelete.title,
-            onConfirm = {
+        DeleteTaskDialog(
+            task = pendingDelete,
+            onDismiss = { taskToDelete = null },
+            onDeleteOne = {
                 vm.deleteTask(pendingDelete)
                 taskToDelete = null
             },
-            onDismiss = { taskToDelete = null },
+            onDeleteSeries = {
+                vm.deleteSeriesFrom(pendingDelete)
+                taskToDelete = null
+            },
         )
     }
 }

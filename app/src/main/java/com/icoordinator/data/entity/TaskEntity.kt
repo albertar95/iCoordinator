@@ -12,6 +12,7 @@ import androidx.room.PrimaryKey
  * alarmOffsetMinutes: null یعنی بدون آلارم، ۰ یعنی لحظه‌ی رسیدن، و عدد مثبت یعنی چند دقیقه قبل
  * goalId: هدفی که این تسک به آن وصل است (اختیاری)
  * goalContribution: percent (0..100) of the goal that this task advanced when it was done
+ * seriesId: شناسه‌ی اولین تکرار یک سری تکراری؛ برای تسک تکی null است
  */
 @Entity(
     tableName = "tasks",
@@ -29,7 +30,7 @@ import androidx.room.PrimaryKey
             onDelete = ForeignKey.SET_NULL,
         ),
     ],
-    indices = [Index("weekStart"), Index("dueAt"), Index("projectId"), Index("goalId")],
+    indices = [Index("weekStart"), Index("dueAt"), Index("projectId"), Index("goalId"), Index("seriesId")],
 )
 data class TaskEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -42,4 +43,5 @@ data class TaskEntity(
     val createdAt: Long = System.currentTimeMillis(),
     val goalId: Long? = null,
     val goalContribution: Int? = null,
+    val seriesId: Long? = null,
 )

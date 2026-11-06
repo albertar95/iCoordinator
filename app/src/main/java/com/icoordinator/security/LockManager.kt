@@ -4,6 +4,7 @@ import android.app.ActivityManager
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Base64
+import com.icoordinator.settings.AppSettings
 import java.security.MessageDigest
 import java.security.SecureRandom
 import javax.crypto.SecretKeyFactory
@@ -19,6 +20,13 @@ class LockManager(context: Context) {
     private val appContext: Context = context.applicationContext ?: context
     private val prefs: SharedPreferences =
         appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    init {
+        AppSettings.init(appContext)
+    }
+
+    /** مدت پس‌زمینه بودن (میلی‌ثانیه) پیش از قفل شدن دوباره؛ از تنظیمات خوانده می‌شود. */
+    fun backgroundTimeoutMs(): Long = AppSettings.lockTimeoutMs()
 
     fun hasPin(): Boolean = prefs.contains(KEY_SALT) && prefs.contains(KEY_HASH)
 
@@ -127,4 +135,7 @@ class LockManager(context: Context) {
 object LockState {
     @Volatile var unlocked: Boolean = false
     @Volatile var backgroundAt: Long = 0L
+
+    /** یک‌بار مصرف: پیش از باز کردن انتخابگر فایل true می‌شود تا برگشت از آن قفل نکند. */
+    @Volatile var skipNextLock: Boolean = false
 }

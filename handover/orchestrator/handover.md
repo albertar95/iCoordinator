@@ -1,31 +1,32 @@
 # Handover - iCoordinator (Claude work state)
 
-Prompt version: Orchestrator v6.8 - Last updated: 2026-11-06 - Mode: Auto - Path: Full (phase 2)
+Prompt version: Orchestrator v6.8 - Last updated: 2026-11-06 - Mode: Auto - Path: Full (phase 3)
 
 ## In one minute
-Last time: Sprints 2 and 3 done and written to the project: shared pickers + task form, project detail (C1, C3c), goal screen (C2, C3b), tasks form/edit/contribution (C5, C6, C3a), routines (C4, C6), calendar day/week (C7), app lock (C8). Independent review found no compile error; its 2 Medium findings were fixed.
-Now: waiting for the user to run push.bat, report the GitHub Actions result, then test on the phone with handover/PHASE2-TEST-GUIDE.md.
+Last time: Phase 3 (C9-C13) coded and written to the project: goal-screen paging, series delete dialog, project order + drag, routine alarm choice (skip when ticked), settings screen (theme, lock timeout, change PIN, backup/restore). Schema v7 with Migration 6->7. Independent review: 0 High; Mediums fixed.
+Now: waiting for the user to run push.bat and report the GitHub Actions result (phases 2 and 3 are both unbuilt), then test with handover/PHASE2-TEST-GUIDE.md and handover/PHASE3-TEST-GUIDE.md.
 Next: if Actions fails, fix from the red step's error text (file:line). If it passes, collect phone-test feedback and fix.
 
 ## Goal
-Changes C1-C8 in changes.md.
+Changes C1-C13 in changes.md.
 
 ## Where we are
-Stop: delivery (phase 2 code complete, untested build).
+Stop: delivery (phase 3 code complete, untested build).
 
 ## Decisions that shape the remaining work
-D19-D35, F12-F17 in decisions.md. Schema v6 locked.
+D19-D49, F12-F17 in decisions.md. Schema v7 locked (D41). D38: unanswered questions take Claude's recommendation.
 
 ## Waiting on the user
 - push.bat + Actions result; phone test results.
-- Open Low items: R1-04 (calendar wide range after paging far), R1-06 (add-goal error position).
+- Open Low: R1-04, R1-06 (phase 2); R2-04 export during writes; R2-06 score colours ignore the app theme setting.
+- Check on phone: whether routine alarms fired before phase 3 (user said "روتین آلارم ندارد"; code always had an at-time alarm - D40).
 
 ## Tools note
-- No compiler in Claude's workspace; build = GitHub Actions after push.bat.
-- No device shell: files move by staging/committing; Claude rebuilds /home/claude/checks (kt_static.py + orchestrator tools) in a new session.
+- No Kotlin compiler / network in Claude's workspace; build = GitHub Actions after push.bat.
+- No device shell: files move by staging/committing. Workspace copy rebuilt by staging app/ sources.
 
-## Metrics so far (phase 2)
-Launches: 5 (S1, S2A, S3, S2B, R). First-try pass: 11/11 at Sonnet Medium. Sub-agent tokens: ~846k. Escalations: 0. Questions asked: 6 (sprint 1 only).
+## Metrics so far (phase 3)
+Launches: 5 (S1, S2, S3, R, F). First-try pass: 14/14 at Sonnet Medium. Sub-agent tokens: ~746k. Escalations: 0. Questions asked: 8 (all answered by recommendation).
 
 ## How to resume
 Start a new session with the Orchestrator skill (v6.8 or later).

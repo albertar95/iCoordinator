@@ -1,33 +1,30 @@
 # Task board - iCoordinator
 
-## Phase 2 (changes C1-C8, see changes.md, roadmap-phase2.md)
-Path: Full. Mode: Auto.
-
+## Phase 3 (changes C9-C13, see changes.md, roadmap-phase3.md) - Full, Auto
 | Task | Name | Level | Launch | Status |
 |---|---|---|---|---|
-| T16 | Entities + Migration 5->6 | Sonnet Medium | S1 | Accepted; built on Actions (user, 15:11) |
-| T17 | DB v6 wiring + ProjectDao | Sonnet Medium | S1 | Accepted |
-| T18 | Task data | Sonnet Medium | S1 | Accepted |
-| T19 | Routine edit + goal repos | Sonnet Medium | S1 | Accepted |
-| T20 | Progress logic + tests | Sonnet Medium | S1 | Accepted |
-| T21 | Pickers, TaskFormDialog, ContributionDialog | Sonnet Medium | S2A | Accepted first try (+ minor fix D35; return lacked QUESTIONS key, added) |
-| T27 | App lock (LockManager, LockScreen, MainActivity) | Sonnet Medium | S3 (parallel with S2A) | Accepted first try (+ R1-03 fix) |
-| T22 | Project detail C1, C3c | Sonnet Medium | S2B | Accepted first try (+ R1-01, R1-05 fixes) |
-| T23 | Goal screen + route C2, C3b | Sonnet Medium | S2B | Accepted first try (+ R1-05) |
-| T24 | Weekly tasks form/edit/tick C5, C6, C3a | Sonnet Medium | S2B | Accepted first try |
-| T25 | Routine form/edit C4, C6 | Sonnet Medium | S2B | Accepted first try |
-| T26 | Calendar day/week views C7 | Sonnet Medium | S2B | Accepted first try |
-| R1 | Independent compile + security review | Sonnet High | R | Done: 0 High, 2 Medium (fixed), 4 Low (2 fixed) |
+| T28 | Entities v7 | Sonnet Medium | S1 | Accepted first try |
+| T29 | PersianSort + test | Sonnet Medium | S1 | Accepted first try (+F03) |
+| T30 | Migration 6->7 + wiring | Sonnet Medium | S1 | Accepted first try |
+| T31 | Task series delete | Sonnet Medium | S1 | Accepted first try |
+| T32 | Project order | Sonnet Medium | S1 | Accepted first try |
+| T33 | Routine alarm scheduling | Sonnet Medium | S1 | Accepted first try (+D47 fix) |
+| T34 | Alarm delivery (offset, done-day skip, cancelAll) | Sonnet Medium | S2 | Accepted first try |
+| T35 | AppSettings, BackupManager, LockManager | Sonnet Medium | S2 | Accepted (+D47 fix, +F01) |
+| T36 | DeleteTaskDialog + goal screen paging | Sonnet Medium | S2 | Accepted first try |
+| T37 | Weekly screen delete dialog | Sonnet Medium | S2 | Accepted first try |
+| T38 | Projects drag reorder | Sonnet Medium | S2 | Accepted first try |
+| T39 | Routine form alarm | Sonnet Medium | S2 | Accepted first try |
+| T41 | Theme/lock wiring in MainActivity | Sonnet Medium | S3 | Accepted first try |
+| T40 | Settings screen + route | Sonnet Medium | S3 | Accepted first try (+F02) |
+| R2 | Independent review | Sonnet High | R | Done: 0 High, 2 Medium, 6 Low |
+| F01-F03 | Review fixes | Sonnet Medium | F | Accepted first try |
 
-## Launches
-- S1: T16-T20, 113.5k sub-agent tokens, 1.5 min.
-- S2A: T21, 110.4k, 1.9 min. S3: T27, 113.0k, 1.7 min (parallel).
-- S2B: T22-T26, 200.5k, 5.1 min.
-- R: R1, 309.0k, 12.4 min.
+## Launches (phase 3)
+- S1: 116.1k tokens, 1.8 min. S2: 153.3k, 2.8 min. S3: 132.3k, 1.8 min. R: 243.8k, 8.2 min. F: 100.6k, 0.7 min.
 
 ## Status
-All 19 changed files written to the project 2026-11-06. Not compiled yet: waiting for push.bat + GitHub Actions, then phone test (handover/PHASE2-TEST-GUIDE.md).
+34 files written to the project 2026-11-06 (CRLF kept). Not compiled yet: waiting for push.bat + GitHub Actions, then phone test (handover/PHASE3-TEST-GUIDE.md; covers phase 2 too via PHASE2-TEST-GUIDE.md).
 
-## Backup
-- handover/backup-phase2-2026-11-06/ (before sprint 1).
-- handover/backup-sprint2-2026-11-06/ (the 12 files sprints 2-3 overwrote, as they were before).
+## Phase 2
+T16-T27 + R1 accepted (see backup and older notes); built status unknown (push not reported).

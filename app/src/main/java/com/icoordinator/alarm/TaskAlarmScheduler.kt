@@ -26,9 +26,20 @@ class TaskAlarmScheduler(private val context: Context) {
     fun cancel(taskId: Long) = cancelCode(taskCode(taskId))
 
     /** آلارم هفتگی روتین برای یک روز؛ endAt = 0 یعنی بدون پایان. */
-    fun scheduleRoutine(routineId: Long, day: DayOfWeek, title: String, triggerAt: Long, endAt: Long) {
+    fun scheduleRoutine(
+        routineId: Long,
+        day: DayOfWeek,
+        title: String,
+        triggerAt: Long,
+        endAt: Long,
+        offsetMinutes: Int = 0,
+    ) {
         val code = routineCode(routineId, day)
-        setAlarm(code, triggerAt, alarmIntent(code, title, WEEK_MS, triggerAt, endAt))
+        setAlarm(
+            code,
+            triggerAt,
+            alarmIntent(code, title, WEEK_MS, triggerAt, endAt, routineId, offsetMinutes * 60_000L),
+        )
     }
 
     fun cancelRoutine(routineId: Long) {
@@ -36,8 +47,16 @@ class TaskAlarmScheduler(private val context: Context) {
     }
 
     /** فراخوانی از AlarmReceiver برای ثبت نوبت بعدی */
-    fun rescheduleRepeating(code: Int, title: String, triggerAt: Long, repeatMs: Long, endAt: Long) {
-        setAlarm(code, triggerAt, alarmIntent(code, title, repeatMs, triggerAt, endAt))
+    fun rescheduleRepeating(
+        code: Int,
+        title: String,
+        triggerAt: Long,
+        repeatMs: Long,
+        endAt: Long,
+        routineId: Long = 0L,
+        offsetMs: Long = 0L,
+    ) {
+        setAlarm(code, triggerAt, alarmIntent(code, title, repeatMs, triggerAt, endAt, routineId, offsetMs))
     }
 
     private fun setAlarm(code: Int, triggerAt: Long, intent: Intent) {
@@ -70,13 +89,23 @@ class TaskAlarmScheduler(private val context: Context) {
         existing.cancel()
     }
 
-    private fun alarmIntent(code: Int, title: String, repeatMs: Long, triggerAt: Long, endAt: Long): Intent =
+    private fun alarmIntent(
+        code: Int,
+        title: String,
+        repeatMs: Long,
+        triggerAt: Long,
+        endAt: Long,
+        routineId: Long = 0L,
+        offsetMs: Long = 0L,
+    ): Intent =
         Intent(context, AlarmReceiver::class.java).apply {
             putExtra(AlarmReceiver.EXTRA_REQUEST_CODE, code)
             putExtra(AlarmReceiver.EXTRA_TITLE, title)
             putExtra(AlarmReceiver.EXTRA_REPEAT_MS, repeatMs)
             putExtra(AlarmReceiver.EXTRA_TRIGGER_AT, triggerAt)
             putExtra(AlarmReceiver.EXTRA_END_AT, endAt)
+            putExtra(AlarmReceiver.EXTRA_ROUTINE_ID, routineId)
+            putExtra(AlarmReceiver.EXTRA_OFFSET_MS, offsetMs)
         }
 
     companion object {

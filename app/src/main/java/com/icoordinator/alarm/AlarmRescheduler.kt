@@ -16,6 +16,13 @@ class AlarmRescheduler(
     private val scheduler: TaskAlarmScheduler,
 ) {
 
+    /** همه‌ی آلارم‌های تسک‌های انجام‌نشده‌ی آینده و روتین‌ها را لغو می‌کند (قبل از بازیابی). */
+    suspend fun cancelAll() {
+        val now = System.currentTimeMillis()
+        tasks.upcomingUndone(now).forEach { scheduler.cancel(it.id) }
+        routines.observeRoutines().first().forEach { scheduler.cancelRoutine(it.id) }
+    }
+
     suspend fun rescheduleAll() {
         val now = System.currentTimeMillis()
 
@@ -28,13 +35,15 @@ class AlarmRescheduler(
             val start = LocalDate.ofEpochDay(routine.startDay)
             val end = routine.endDay?.let { LocalDate.ofEpochDay(it) }
             val endAt = end?.let { WeekUtils.toMillis(it.plusDays(1).atStartOfDay()) } ?: 0L
-            val from: LocalDateTime = maxOf(LocalDateTime.now(), start.atStartOfDay())
+            val offset = routine.alarmOffsetMinutes ?: return@forEach
+            val offsetMs = offset * 60_000L
+            val nowDt = LocalDateTime.now()
 
             RoutineUtils.daysOf(routine.daysMask).forEach { day ->
-                val next = RoutineUtils.nextOccurrence(day, time, from)
-                val nextDate = WeekUtils.toLocalDateTime(next).toLocalDate()
-                if (end != null && nextDate > end) return@forEach
-                scheduler.scheduleRoutine(routine.id, day, routine.title, next, endAt)
+                val trigger = RoutineUtils.nextAlarm(day, time, offset, nowDt, start) ?: return@forEach
+                val occurrenceDate = WeekUtils.toLocalDateTime(trigger + offsetMs).toLocalDate()
+                if (end != null && occurrenceDate > end) return@forEach
+                scheduler.scheduleRoutine(routine.id, day, routine.title, trigger, endAt, offset)
             }
         }
     }

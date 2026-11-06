@@ -154,8 +154,8 @@ private val AppShapes = Shapes(
 )
 
 @Composable
-fun ICoordinatorTheme(content: @Composable () -> Unit) {
-    val colors = if (isSystemInDarkTheme()) DarkColors else LightColors
+fun ICoordinatorTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
+    val colors = if (darkTheme) DarkColors else LightColors
     MaterialTheme(
         colorScheme = colors,
         typography = AppTypography,

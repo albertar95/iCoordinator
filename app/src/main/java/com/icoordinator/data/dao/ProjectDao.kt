@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface ProjectDao {
 
-    @Query("SELECT * FROM projects ORDER BY createdAt DESC")
+    @Query("SELECT * FROM projects ORDER BY sortOrder, id")
     fun observeProjects(): Flow<List<ProjectEntity>>
 
     @Query("SELECT * FROM projects WHERE id = :projectId")
@@ -31,6 +31,9 @@ interface ProjectDao {
     @Query("SELECT COALESCE(SUM(weightPercent), 0) FROM goals WHERE projectId = :projectId")
     suspend fun totalWeight(projectId: Long): Int
 
+    @Query("SELECT MAX(sortOrder) FROM projects")
+    suspend fun maxProjectSortOrder(): Int?
+
     @Query("SELECT MAX(sortOrder) FROM goals WHERE projectId = :projectId")
     suspend fun maxSortOrder(projectId: Long): Int?
 
@@ -42,6 +45,9 @@ interface ProjectDao {
 
     @Update
     suspend fun updateProject(project: ProjectEntity)
+
+    @Update
+    suspend fun updateProjects(projects: List<ProjectEntity>)
 
     @Delete
     suspend fun deleteProject(project: ProjectEntity)

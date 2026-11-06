@@ -37,11 +37,12 @@ class RoutinesViewModel(private val repo: RoutineRepository) : ViewModel() {
         time: LocalTime,
         startDate: LocalDate,
         endDate: LocalDate?,
+        alarmOffset: Int?,
     ): Boolean {
         val message = validate(title, days, startDate, endDate)
         _error.value = message
         if (message != null) return false
-        viewModelScope.launch { repo.addRoutine(title, days, time, startDate, endDate) }
+        viewModelScope.launch { repo.addRoutine(title, days, time, startDate, endDate, alarmOffset) }
         return true
     }
 
@@ -53,11 +54,12 @@ class RoutinesViewModel(private val repo: RoutineRepository) : ViewModel() {
         time: LocalTime,
         startDate: LocalDate,
         endDate: LocalDate?,
+        alarmOffset: Int?,
     ): Boolean {
         val message = validate(title, days, startDate, endDate)
         _error.value = message
         if (message != null) return false
-        viewModelScope.launch { repo.updateRoutine(routine, title, days, time, startDate, endDate) }
+        viewModelScope.launch { repo.updateRoutine(routine, title, days, time, startDate, endDate, alarmOffset) }
         return true
     }
 

@@ -21,7 +21,7 @@ class ICoordinatorApp : Application() {
     val database: AppDatabase by lazy {
         // every schema change needs a Migration in data/Migrations.kt
         Room.databaseBuilder(this, AppDatabase::class.java, "icoordinator.db")
-            .addMigrations(Migrations.MIGRATION_5_6)
+            .addMigrations(Migrations.MIGRATION_5_6, Migrations.MIGRATION_6_7)
             .build()
     }
 

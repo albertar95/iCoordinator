@@ -29,6 +29,7 @@ class RoutineRepository(
         time: LocalTime,
         startDate: LocalDate,
         endDate: LocalDate?,
+        alarmOffset: Int? = 0,
     ) {
         val cleanTitle = title.trim()
         val id = dao.insertRoutine(
@@ -38,9 +39,10 @@ class RoutineRepository(
                 timeOfDay = time.format(WeekUtils.TIME_FMT),
                 startDay = startDate.toEpochDay(),
                 endDay = endDate?.toEpochDay(),
+                alarmOffsetMinutes = alarmOffset,
             ),
         )
-        scheduleAlarms(id, cleanTitle, days, time, startDate, endDate)
+        scheduleAlarms(id, cleanTitle, days, time, startDate, endDate, alarmOffset)
     }
 
     /** ویرایش روتین: آلارم‌های قبلی لغو و با مقادیر جدید دوباره ثبت می‌شوند. انجام‌ها حفظ می‌شوند. */
@@ -51,6 +53,7 @@ class RoutineRepository(
         time: LocalTime,
         startDate: LocalDate,
         endDate: LocalDate?,
+        alarmOffset: Int? = routine.alarmOffsetMinutes,
     ) {
         val cleanTitle = title.trim()
         alarms.cancelRoutine(routine.id)
@@ -61,9 +64,10 @@ class RoutineRepository(
                 timeOfDay = time.format(WeekUtils.TIME_FMT),
                 startDay = startDate.toEpochDay(),
                 endDay = endDate?.toEpochDay(),
+                alarmOffsetMinutes = alarmOffset,
             ),
         )
-        scheduleAlarms(routine.id, cleanTitle, days, time, startDate, endDate)
+        scheduleAlarms(routine.id, cleanTitle, days, time, startDate, endDate, alarmOffset)
     }
 
     suspend fun deleteRoutine(routine: RoutineEntity) {
@@ -79,7 +83,24 @@ class RoutineRepository(
         }
     }
 
-    /** آلارم هر روز را از اولین نوبت بعد از الان یا شروع روتین ثبت می‌کند، تا پایان روتین. */
+    /** آلارم‌های یک روتین ذخیره‌شده را (بدون لغو قبلی‌ها) دوباره ثبت می‌کند؛ برای بازتنظیم بعد از ری‌استارت. */
+    fun scheduleAlarmsFor(routine: RoutineEntity) {
+        val time = WeekUtils.parseTime(routine.timeOfDay) ?: return
+        scheduleAlarms(
+            id = routine.id,
+            title = routine.title,
+            days = RoutineUtils.daysOf(routine.daysMask).toSet(),
+            time = time,
+            startDate = LocalDate.ofEpochDay(routine.startDay),
+            endDate = routine.endDay?.let { LocalDate.ofEpochDay(it) },
+            alarmOffset = routine.alarmOffsetMinutes,
+        )
+    }
+
+    /**
+     * آلارم هر روز را از اولین نوبتِ بعد از الان (در/بعد از شروع روتین) ثبت می‌کند، تا پایان روتین.
+     * alarmOffset: null یعنی بدون آلارم، ۰ همان ساعت، و N یعنی N دقیقه قبل.
+     */
     private fun scheduleAlarms(
         id: Long,
         title: String,
@@ -87,14 +108,16 @@ class RoutineRepository(
         time: LocalTime,
         startDate: LocalDate,
         endDate: LocalDate?,
+        alarmOffset: Int?,
     ) {
+        if (alarmOffset == null) return
         val endAt = endDate?.let { WeekUtils.toMillis(it.plusDays(1).atStartOfDay()) } ?: 0L
-        val from: LocalDateTime = maxOf(LocalDateTime.now(), startDate.atStartOfDay())
+        val now = LocalDateTime.now()
         days.forEach { day ->
-            val next = RoutineUtils.nextOccurrence(day, time, from)
-            val nextDate = WeekUtils.toLocalDateTime(next).toLocalDate()
-            if (endDate != null && nextDate > endDate) return@forEach
-            alarms.scheduleRoutine(id, day, title, next, endAt)
+            val trigger = RoutineUtils.nextAlarm(day, time, alarmOffset, now, startDate) ?: return@forEach
+            val occurrenceDate = WeekUtils.toLocalDateTime(trigger + alarmOffset * 60_000L).toLocalDate()
+            if (endDate != null && occurrenceDate > endDate) return@forEach
+            alarms.scheduleRoutine(id, day, title, trigger, endAt, alarmOffset)
         }
     }
 }

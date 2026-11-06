@@ -18,8 +18,19 @@ class ProjectRepository(private val dao: ProjectDao) {
 
     fun observeGoals(projectId: Long): Flow<List<GoalEntity>> = dao.observeGoals(projectId)
 
-    suspend fun createProject(title: String): Long =
-        dao.insertProject(ProjectEntity(title = title.trim()))
+    /** پروژه‌ی جدید در انتهای فهرست قرار می‌گیرد. */
+    suspend fun createProject(title: String): Long {
+        val sortOrder = (dao.maxProjectSortOrder() ?: -1) + 1
+        return dao.insertProject(ProjectEntity(title = title.trim(), sortOrder = sortOrder))
+    }
+
+    /** ترتیب جدید پروژه‌ها: sortOrder = شماره‌ی جایگاه (از ۰)؛ فقط ردیف‌هایی که تغییر می‌کنند نوشته می‌شوند. */
+    suspend fun reorderProjects(ordered: List<ProjectEntity>) {
+        val changed = ordered.mapIndexedNotNull { index, project ->
+            if (project.sortOrder != index) project.copy(sortOrder = index) else null
+        }
+        if (changed.isNotEmpty()) dao.updateProjects(changed)
+    }
 
     suspend fun updateManifesto(project: ProjectEntity, text: String) =
         dao.updateProject(project.copy(manifesto = text))

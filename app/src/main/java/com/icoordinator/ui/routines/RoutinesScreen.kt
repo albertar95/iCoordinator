@@ -29,6 +29,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.icoordinator.ICoordinatorApp
 import com.icoordinator.R
 import com.icoordinator.data.entity.RoutineEntity
+import com.icoordinator.domain.ALARM_OPTIONS
+import com.icoordinator.domain.AlarmOption
 import com.icoordinator.domain.RoutineUtils
 import com.icoordinator.domain.WeekUtils
 import com.icoordinator.ui.components.AppTextField
@@ -143,11 +145,11 @@ fun RoutinesScreen() {
                 showAdd = false
                 routineToEdit = null
             },
-            onSave = { title, days, time, start, end ->
+            onSave = { title, days, time, start, end, alarmOffset ->
                 val saved = if (editing == null) {
-                    vm.addRoutine(title, days, time, start, end)
+                    vm.addRoutine(title, days, time, start, end, alarmOffset)
                 } else {
-                    vm.updateRoutine(editing, title, days, time, start, end)
+                    vm.updateRoutine(editing, title, days, time, start, end, alarmOffset)
                 }
                 if (saved) {
                     showAdd = false
@@ -176,7 +178,7 @@ private fun RoutineFormDialog(
     errorText: String?,
     onEdit: () -> Unit,
     onDismiss: () -> Unit,
-    onSave: (String, Set<DayOfWeek>, LocalTime, LocalDate, LocalDate?) -> Unit,
+    onSave: (String, Set<DayOfWeek>, LocalTime, LocalDate, LocalDate?, Int?) -> Unit,
 ) {
     var title by remember(initial?.id) { mutableStateOf(initial?.title ?: "") }
     var days by remember(initial?.id) {
@@ -190,6 +192,14 @@ private fun RoutineFormDialog(
     }
     var endDate by remember(initial?.id) {
         mutableStateOf<LocalDate?>(initial?.endDay?.let { LocalDate.ofEpochDay(it) })
+    }
+    // new routine: "at time" (offset 0) if it exists, else the first option; edit: the stored offset
+    var alarm: AlarmOption by remember(initial?.id) {
+        val default = ALARM_OPTIONS.firstOrNull { it.offsetMinutes == 0 } ?: ALARM_OPTIONS[0]
+        mutableStateOf(
+            if (initial == null) default
+            else ALARM_OPTIONS.firstOrNull { it.offsetMinutes == initial.alarmOffsetMinutes } ?: default,
+        )
     }
     var showStartPicker by remember { mutableStateOf(false) }
     var showEndPicker by remember { mutableStateOf(false) }
@@ -256,6 +266,20 @@ private fun RoutineFormDialog(
                     label = { Text("بدون پایان") },
                 )
 
+                Text("آلارم", style = MaterialTheme.typography.bodySmall)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(ALARM_OPTIONS) { option ->
+                        FilterChip(
+                            selected = alarm == option,
+                            onClick = {
+                                alarm = option
+                                onEdit()
+                            },
+                            label = { Text(option.label) },
+                        )
+                    }
+                }
+
                 errorText?.let {
                     Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
@@ -264,7 +288,7 @@ private fun RoutineFormDialog(
         confirmButton = {
             PillButton(
                 text = "ذخیره",
-                onClick = { onSave(title, days, time, startDate, endDate) },
+                onClick = { onSave(title, days, time, startDate, endDate, alarm.offsetMinutes) },
                 modifier = Modifier.height(52.dp),
             )
         },

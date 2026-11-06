@@ -29,4 +29,19 @@ object RoutineUtils {
         if (!candidate.isAfter(now)) candidate = candidate.plusWeeks(1)
         return WeekUtils.toMillis(candidate)
     }
+
+    /**
+     * زمان فعال‌شدن آلارم روتین (میلی‌ثانیه) = نوبت - offsetMinutes، برای اولین نوبتِ این روز هفته و ساعت
+     * (در/بعد از startDate) که زمان آلارمش بعد از now باشد. در عمل همیشه مقدار برمی‌گرداند.
+     */
+    fun nextAlarm(day: DayOfWeek, time: LocalTime, offsetMinutes: Int, now: LocalDateTime, startDate: LocalDate): Long? {
+        val base = if (startDate.isAfter(now.toLocalDate())) startDate else now.toLocalDate()
+        var date: LocalDate = base.with(TemporalAdjusters.nextOrSame(day))
+        repeat(8) {
+            val trigger = LocalDateTime.of(date, time).minusMinutes(offsetMinutes.toLong())
+            if (trigger.isAfter(now)) return WeekUtils.toMillis(trigger)
+            date = date.plusWeeks(1)
+        }
+        return null
+    }
 }
