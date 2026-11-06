@@ -43,6 +43,29 @@ class RoutineRepository(
         scheduleAlarms(id, cleanTitle, days, time, startDate, endDate)
     }
 
+    /** ویرایش روتین: آلارم‌های قبلی لغو و با مقادیر جدید دوباره ثبت می‌شوند. انجام‌ها حفظ می‌شوند. */
+    suspend fun updateRoutine(
+        routine: RoutineEntity,
+        title: String,
+        days: Set<DayOfWeek>,
+        time: LocalTime,
+        startDate: LocalDate,
+        endDate: LocalDate?,
+    ) {
+        val cleanTitle = title.trim()
+        alarms.cancelRoutine(routine.id)
+        dao.updateRoutine(
+            routine.copy(
+                title = cleanTitle,
+                daysMask = RoutineUtils.maskOf(days),
+                timeOfDay = time.format(WeekUtils.TIME_FMT),
+                startDay = startDate.toEpochDay(),
+                endDay = endDate?.toEpochDay(),
+            ),
+        )
+        scheduleAlarms(routine.id, cleanTitle, days, time, startDate, endDate)
+    }
+
     suspend fun deleteRoutine(routine: RoutineEntity) {
         alarms.cancelRoutine(routine.id)
         dao.deleteRoutine(routine)

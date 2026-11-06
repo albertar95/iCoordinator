@@ -1,5 +1,6 @@
 package com.icoordinator.data.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -24,4 +25,5 @@ data class GoalEntity(
     val title: String,
     val weightPercent: Int,
     val isDone: Boolean = false,
+    @ColumnInfo(defaultValue = "0") val sortOrder: Int = 0,
 )

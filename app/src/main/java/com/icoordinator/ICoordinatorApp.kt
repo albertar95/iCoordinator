@@ -5,6 +5,7 @@ import androidx.room.Room
 import com.icoordinator.alarm.AlarmRescheduler
 import com.icoordinator.alarm.TaskAlarmScheduler
 import com.icoordinator.data.AppDatabase
+import com.icoordinator.data.Migrations
 import com.icoordinator.data.ProjectRepository
 import com.icoordinator.data.ReportRepository
 import com.icoordinator.data.RoutineRepository
@@ -18,9 +19,9 @@ class ICoordinatorApp : Application() {
     }
 
     val database: AppDatabase by lazy {
-        // فعلاً نسخه‌ی اول است؛ در مهاجرت‌های بعدی Migration جداگانه می‌نویسیم
+        // every schema change needs a Migration in data/Migrations.kt
         Room.databaseBuilder(this, AppDatabase::class.java, "icoordinator.db")
-            .fallbackToDestructiveMigration()
+            .addMigrations(Migrations.MIGRATION_5_6)
             .build()
     }
 

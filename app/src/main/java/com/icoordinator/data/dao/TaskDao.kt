@@ -22,6 +22,15 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE isDone = 0 AND dueAt > :now")
     suspend fun upcomingUndone(now: Long): List<TaskEntity>
 
+    @Query("SELECT * FROM tasks WHERE goalId = :goalId ORDER BY dueAt")
+    fun observeByGoal(goalId: Long): Flow<List<TaskEntity>>
+
+    @Query("SELECT * FROM tasks WHERE goalId IS NOT NULL")
+    fun observeWithGoal(): Flow<List<TaskEntity>>
+
+    @Query("SELECT * FROM tasks WHERE id = :id")
+    suspend fun getById(id: Long): TaskEntity?
+
     @Insert
     suspend fun insert(task: TaskEntity): Long
 

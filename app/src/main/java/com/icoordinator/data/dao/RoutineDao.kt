@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Update
 import com.icoordinator.data.entity.RoutineCompletionEntity
 import com.icoordinator.data.entity.RoutineEntity
 import kotlinx.coroutines.flow.Flow
@@ -20,6 +21,9 @@ interface RoutineDao {
 
     @Insert
     suspend fun insertRoutine(routine: RoutineEntity): Long
+
+    @Update
+    suspend fun updateRoutine(routine: RoutineEntity)
 
     @Delete
     suspend fun deleteRoutine(routine: RoutineEntity)

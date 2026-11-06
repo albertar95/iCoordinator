@@ -19,14 +19,23 @@ interface ProjectDao {
     @Query("SELECT * FROM projects WHERE id = :projectId")
     fun observeProject(projectId: Long): Flow<ProjectEntity?>
 
-    @Query("SELECT * FROM goals ORDER BY id")
+    @Query("SELECT * FROM goals ORDER BY projectId, sortOrder, id")
     fun observeAllGoals(): Flow<List<GoalEntity>>
 
-    @Query("SELECT * FROM goals WHERE projectId = :projectId ORDER BY id")
+    @Query("SELECT * FROM goals WHERE projectId = :projectId ORDER BY sortOrder, id")
     fun observeGoals(projectId: Long): Flow<List<GoalEntity>>
+
+    @Query("SELECT * FROM goals WHERE id = :goalId")
+    fun observeGoal(goalId: Long): Flow<GoalEntity?>
 
     @Query("SELECT COALESCE(SUM(weightPercent), 0) FROM goals WHERE projectId = :projectId")
     suspend fun totalWeight(projectId: Long): Int
+
+    @Query("SELECT MAX(sortOrder) FROM goals WHERE projectId = :projectId")
+    suspend fun maxSortOrder(projectId: Long): Int?
+
+    @Query("SELECT COALESCE(SUM(weightPercent), 0) FROM goals WHERE projectId = :projectId AND id != :goalId")
+    suspend fun totalWeightExcluding(projectId: Long, goalId: Long): Int
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertProject(project: ProjectEntity): Long
@@ -42,6 +51,9 @@ interface ProjectDao {
 
     @Update
     suspend fun updateGoal(goal: GoalEntity)
+
+    @Update
+    suspend fun updateGoals(goals: List<GoalEntity>)
 
     @Delete
     suspend fun deleteGoal(goal: GoalEntity)

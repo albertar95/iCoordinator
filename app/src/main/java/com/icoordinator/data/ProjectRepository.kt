@@ -14,6 +14,8 @@ class ProjectRepository(private val dao: ProjectDao) {
 
     fun observeAllGoals(): Flow<List<GoalEntity>> = dao.observeAllGoals()
 
+    fun observeGoal(id: Long): Flow<GoalEntity?> = dao.observeGoal(id)
+
     fun observeGoals(projectId: Long): Flow<List<GoalEntity>> = dao.observeGoals(projectId)
 
     suspend fun createProject(title: String): Long =
@@ -28,9 +30,31 @@ class ProjectRepository(private val dao: ProjectDao) {
     suspend fun addGoal(projectId: Long, title: String, weightPercent: Int): String? {
         val total = dao.totalWeight(projectId)
         ProgressCalculator.validateNewWeight(total, weightPercent)?.let { return it }
-        dao.insertGoal(GoalEntity(projectId = projectId, title = title.trim(), weightPercent = weightPercent))
+        val sortOrder = (dao.maxSortOrder(projectId) ?: 0) + 1
+        dao.insertGoal(
+            GoalEntity(
+                projectId = projectId,
+                title = title.trim(),
+                weightPercent = weightPercent,
+                sortOrder = sortOrder,
+            ),
+        )
         return null
     }
+
+    /** برمی‌گرداند: null یعنی موفق، در غیر این صورت پیام خطا. سقف ۱۰۰٪ بدون احتساب خود هدف بررسی می‌شود. */
+    suspend fun updateGoal(goal: GoalEntity, title: String, weightPercent: Int): String? {
+        val clean = title.trim()
+        if (clean.isEmpty()) return "عنوان هدف را وارد کن"
+        val others = dao.totalWeightExcluding(goal.projectId, goal.id)
+        ProgressCalculator.validateNewWeight(others, weightPercent)?.let { return it }
+        dao.updateGoal(goal.copy(title = clean, weightPercent = weightPercent))
+        return null
+    }
+
+    /** ترتیب جدید اهداف: sortOrder = شماره‌ی جایگاه (از ۱) */
+    suspend fun reorderGoals(ordered: List<GoalEntity>) =
+        dao.updateGoals(ordered.mapIndexed { index, goal -> goal.copy(sortOrder = index + 1) })
 
     suspend fun toggleGoal(goal: GoalEntity) = dao.updateGoal(goal.copy(isDone = !goal.isDone))
 

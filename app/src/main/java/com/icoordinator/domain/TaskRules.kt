@@ -1,5 +1,6 @@
 package com.icoordinator.domain
 
+import java.time.DayOfWeek
 import java.time.LocalDate
 
 enum class RepeatType(val label: String) {
@@ -27,10 +28,30 @@ object TaskRules {
     const val MAX_OCCURRENCES = 366
 
     /** تاریخ‌های یک تسک تکرارشونده از start تا until (شامل هر دو). */
-    fun occurrenceDates(start: LocalDate, repeat: RepeatType, until: LocalDate?): List<LocalDate> {
+    fun occurrenceDates(start: LocalDate, repeat: RepeatType, until: LocalDate?): List<LocalDate> =
+        occurrenceDates(start, repeat, until, emptySet())
+
+    /**
+     * مثل نسخه‌ی سه‌پارامتری؛ اگر repeat هفتگی باشد و weekDays خالی نباشد،
+     * هر تاریخ بین start و until (شامل هر دو) که روز هفته‌اش در weekDays باشد برمی‌گردد.
+     */
+    fun occurrenceDates(
+        start: LocalDate,
+        repeat: RepeatType,
+        until: LocalDate?,
+        weekDays: Set<DayOfWeek>,
+    ): List<LocalDate> {
         if (repeat == RepeatType.NONE || until == null) return listOf(start)
-        val step = if (repeat == RepeatType.DAILY) 1L else 7L
         val dates = mutableListOf<LocalDate>()
+        if (repeat == RepeatType.WEEKLY && weekDays.isNotEmpty()) {
+            var d = start
+            while (!d.isAfter(until) && dates.size < MAX_OCCURRENCES) {
+                if (d.dayOfWeek in weekDays) dates.add(d)
+                d = d.plusDays(1)
+            }
+            return dates
+        }
+        val step = if (repeat == RepeatType.DAILY) 1L else 7L
         var d = start
         while (!d.isAfter(until) && dates.size < MAX_OCCURRENCES) {
             dates.add(d)
