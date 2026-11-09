@@ -45,6 +45,10 @@ for f in files:
         out(s.count(a) == s.count(b), f'{f} balanced {a}{b} ({s.count(a)}/{s.count(b)})')
     out('TODO(' not in s, f'{f} no TODO(')
     out('!!' not in s, f'{f} no !!')
+    if re.search(r'\b(val|var)\s+\w+\s+by\s+(?!lazy\b)', s) and 'androidx.compose.runtime' in src:
+        out('import androidx.compose.runtime.getValue' in src or 'import androidx.compose.runtime.*' in src, f'{f} has getValue import for by-delegates')
+    if re.search(r'\bvar\s+\w+\s+by\s+(?!lazy\b)', s) and 'androidx.compose.runtime' in src:
+        out('import androidx.compose.runtime.setValue' in src or 'import androidx.compose.runtime.*' in src, f'{f} has setValue import for var by-delegates')
     missing = sorted({d for d in re.findall(r'R\.drawable\.(\w+)', s)} - draw)
     out(not missing, f'{f} drawables exist' + (': missing ' + ', '.join(missing) if missing else ''))
 for r in req:
