@@ -1,5 +1,9 @@
 package com.icoordinator.ui.lock
 
+import android.content.Context
+import android.content.ContextWrapper
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -39,9 +44,13 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import com.icoordinator.security.LockManager
+import com.icoordinator.settings.AppSettings
 import com.icoordinator.ui.components.PageHeader
 import com.icoordinator.ui.components.PillButton
+import androidx.compose.runtime.collectAsState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -60,6 +69,10 @@ private fun toPersianDigits(text: String): String =
 @Composable
 fun LockScreen(lock: LockManager, onUnlocked: () -> Unit) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val activity = remember(context) { context.findFragmentActivity() }
+    val biometricOn by AppSettings.biometricEnabled.collectAsState()
+    val canBiometric = lock.hasPin() && biometricOn && activity != null && biometricAvailable(context)
 
     var stage by remember { mutableStateOf(if (lock.hasPin()) Stage.UNLOCK else Stage.SETUP_NEW) }
     var entry by remember { mutableStateOf("") }
@@ -77,6 +90,11 @@ fun LockScreen(lock: LockManager, onUnlocked: () -> Unit) {
             delay(250)
         }
         now = System.currentTimeMillis()
+    }
+
+    // یک بار در هر نمایش صفحه‌ی قفل، پنجره‌ی اثر انگشت خودکار باز می‌شود
+    LaunchedEffect(Unit) {
+        if (canBiometric && activity != null) showBiometricPrompt(activity) { onUnlocked() }
     }
 
     val remainingSeconds = if (lockedUntil > now) ((lockedUntil - now + 999) / 1000).toInt() else 0
@@ -288,6 +306,14 @@ fun LockScreen(lock: LockManager, onUnlocked: () -> Unit) {
         Spacer(Modifier.height(24.dp))
         when (stage) {
             Stage.UNLOCK -> {
+                if (canBiometric && activity != null) {
+                    PillButton(
+                        text = "ورود با اثر انگشت",
+                        onClick = { showBiometricPrompt(activity) { onUnlocked() } },
+                        enabled = !busy && !lockedOut,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
                 PillButton(
                     text = "تغییر رمز",
                     onClick = {
@@ -348,6 +374,46 @@ fun LockScreen(lock: LockManager, onUnlocked: () -> Unit) {
 }
 
 private val KeySize = 72.dp
+
+private const val BIOMETRIC_AUTHENTICATORS =
+    BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.BIOMETRIC_WEAK
+
+private fun Context.findFragmentActivity(): FragmentActivity? {
+    var c: Context? = this
+    while (c is ContextWrapper) {
+        if (c is FragmentActivity) return c
+        c = c.baseContext
+    }
+    return null
+}
+
+private fun biometricAvailable(context: Context): Boolean =
+    try {
+        BiometricManager.from(context).canAuthenticate(BIOMETRIC_AUTHENTICATORS) == BiometricManager.BIOMETRIC_SUCCESS
+    } catch (e: Exception) {
+        false
+    }
+
+/** پنجره‌ی سیستمی اثر انگشت/چهره؛ خطا یا انصراف کاربر را روی صفحه‌ی رمز می‌گذارد. */
+private fun showBiometricPrompt(activity: FragmentActivity, onSuccess: () -> Unit) {
+    try {
+        val callback = object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                onSuccess()
+            }
+        }
+        val prompt = BiometricPrompt(activity, ContextCompat.getMainExecutor(activity), callback)
+        val info = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("باز کردن iCoordinator")
+            .setSubtitle("با اثر انگشت یا چهره")
+            .setNegativeButtonText("استفاده از رمز")
+            .setAllowedAuthenticators(BIOMETRIC_AUTHENTICATORS)
+            .build()
+        prompt.authenticate(info)
+    } catch (e: Exception) {
+        // در صورت خطا همان صفحه‌ی رمز می‌ماند
+    }
+}
 
 @Composable
 private fun KeyButton(label: String, description: String?, enabled: Boolean, onClick: () -> Unit) {

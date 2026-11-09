@@ -75,6 +75,12 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+/** Set by other screens (reports) to open a loan's detail the next time LoansScreen is shown; LoansScreen consumes
+ *  (sets back to null) after opening it. */
+object LoanOpenRequest {
+    val loanId: MutableStateFlow<Long?> = MutableStateFlow(null)
+}
+
 /** A loan with its installments (sorted by seq) and derived data. */
 data class LoanRow(
     val loan: LoanEntity,
@@ -252,6 +258,7 @@ fun LoansScreen() {
     val message by vm.message.collectAsStateWithLifecycle()
     val saving by vm.saving.collectAsStateWithLifecycle()
     val formError by vm.formError.collectAsStateWithLifecycle()
+    val openRequest by LoanOpenRequest.loanId.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
 
     var selectedId by rememberSaveable { mutableStateOf(-1L) }
@@ -264,6 +271,17 @@ fun LoansScreen() {
         if (text != null) {
             snackbar.showSnackbar(text)
             vm.consumeMessage()
+        }
+    }
+    // another screen (reports) asked to open a loan: show its detail and consume the request
+    LaunchedEffect(openRequest, state.loaded) {
+        val requested = openRequest
+        if (requested != null && state.loaded) {
+            if (state.rows.any { it.loan.id == requested }) {
+                formMode = 0
+                selectedId = requested
+            }
+            LoanOpenRequest.loanId.value = null
         }
     }
     // the selected loan vanished (deleted): back to the list
@@ -311,7 +329,10 @@ fun LoansScreen() {
 
 @Composable
 private fun LoanList(state: LoansState, onAdd: () -> Unit, onOpen: (Long) -> Unit) {
-    val entries = remember(state.rows) {
+    var showClosed by rememberSaveable { mutableStateOf(false) }
+    val closedCount = remember(state.rows) { state.rows.count { it.loan.isClosed } }
+    val openCount = state.rows.size - closedCount
+    val entries = remember(state.rows, showClosed) {
         val open = state.rows.filter { !it.loan.isClosed }
         val closed = state.rows.filter { it.loan.isClosed }.sortedWith(compareBy<LoanRow>({ it.loan.title }, { it.loan.id }))
         val sortedOpen = open.sortedWith(
@@ -323,7 +344,7 @@ private fun LoanList(state: LoansState, onAdd: () -> Unit, onOpen: (Long) -> Uni
                 add(LoanEntry.DateHeader(day.toString(), title))
                 group.forEach { add(LoanEntry.Card(it)) }
             }
-            if (closed.isNotEmpty()) {
+            if (showClosed && closed.isNotEmpty()) {
                 add(LoanEntry.ClosedLabel("closed"))
                 closed.forEach { add(LoanEntry.Card(it)) }
             }
@@ -336,7 +357,7 @@ private fun LoanList(state: LoansState, onAdd: () -> Unit, onOpen: (Long) -> Uni
             actionDescription = "وام جدید",
             onAction = onAdd,
         )
-        if (state.loaded && entries.isEmpty()) {
+        if (state.loaded && state.rows.isEmpty()) {
             EmptyState(
                 icon = R.drawable.ic_tb_credit_card,
                 title = "وامی ثبت نشده",
@@ -367,6 +388,27 @@ private fun LoanList(state: LoansState, onAdd: () -> Unit, onOpen: (Long) -> Uni
                         )
                         is LoanEntry.ClosedLabel -> SectionLabel("تسویه‌شده")
                         is LoanEntry.Card -> LoanCard(row = entry.row, onOpen = { onOpen(entry.row.loan.id) })
+                    }
+                }
+                if (state.loaded && openCount == 0 && closedCount > 0) {
+                    item(key = "no_open") {
+                        Text(
+                            text = "وام بازی نداری",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                }
+                if (closedCount > 0) {
+                    item(key = "toggle_closed") {
+                        PillButton(
+                            text = if (showClosed) "پنهان کردن وام‌های تسویه‌شده" else "نمایش وام‌های تسویه‌شده (" + num(closedCount) + ")",
+                            onClick = { showClosed = !showClosed },
+                            outlined = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                     }
                 }
             }

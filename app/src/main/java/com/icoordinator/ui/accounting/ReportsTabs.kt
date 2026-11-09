@@ -34,6 +34,8 @@ import com.icoordinator.R
 import com.icoordinator.accounting.AccountKind
 import com.icoordinator.accounting.AccountingFormat
 import com.icoordinator.accounting.AccountingMath
+import com.icoordinator.accounting.InstallmentStats
+import com.icoordinator.accounting.LoanReportRow
 import com.icoordinator.accounting.MoneyFormat
 import com.icoordinator.accounting.ReportStats
 import com.icoordinator.accounting.TxType
@@ -79,13 +81,13 @@ private fun TabScaffold(content: @Composable () -> Unit) {
     ) { content() }
 }
 
-/** Year arrows: under RTL the right-pointing chevron is "previous" (same as the month arrows). */
+/** Year arrows: the right-pointing chevron (start side under RTL) moves forward to the next year. */
 @Composable
 private fun YearSelector(year: Int, onYear: (Int) -> Unit) {
     val scheme = MaterialTheme.colorScheme
     Row(verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = { onYear(year - 1) }) {
-            TbIcon(R.drawable.ic_tb_chevron_right, "سال قبل", tint = scheme.onSurface)
+        IconButton(onClick = { onYear(year + 1) }) {
+            TbIcon(R.drawable.ic_tb_chevron_right, "سال بعد", tint = scheme.onSurface)
         }
         Text(
             text = AccountingFormat.digits(year.toString()),
@@ -94,8 +96,8 @@ private fun YearSelector(year: Int, onYear: (Int) -> Unit) {
             modifier = Modifier.weight(1f),
             textAlign = TextAlign.Center,
         )
-        IconButton(onClick = { onYear(year + 1) }) {
-            TbIcon(R.drawable.ic_tb_chevron_left, "سال بعد", tint = scheme.onSurface)
+        IconButton(onClick = { onYear(year - 1) }) {
+            TbIcon(R.drawable.ic_tb_chevron_left, "سال قبل", tint = scheme.onSurface)
         }
     }
 }
@@ -150,6 +152,14 @@ internal fun MonthlyReportTab(data: ReportsData) {
     val active = series.filter { it.income != 0L || it.expense != 0L }
     val totalIncome = series.sumOf { it.income }
     val totalExpense = series.sumOf { it.expense }
+    val dueByMonth = remember(data, year) {
+        series.map { m ->
+            val r = AccountingFormat.monthRange(year, m.month)
+            InstallmentStats.dueInRange(data.installments, r.first, r.last).total
+        }
+    }
+    val totalDue = dueByMonth.sum()
+    val avgDue = if (active.isEmpty()) 0L else totalDue / active.size
     val avgIncome = if (active.isEmpty()) 0L else totalIncome / active.size
     val avgExpense = if (active.isEmpty()) 0L else totalExpense / active.size
 
@@ -174,7 +184,7 @@ internal fun MonthlyReportTab(data: ReportsData) {
         }
         ReportSection("جدول ماهانه") {
             val incomeColor = txTypeColor(TxType.RECEIVE)
-            fun line(label: String, income: Long, expense: Long): List<Cell> {
+            fun line(label: String, income: Long, expense: Long, due: Long): List<Cell> {
                 val net = income - expense
                 return listOf(
                     Cell(label),
@@ -182,15 +192,17 @@ internal fun MonthlyReportTab(data: ReportsData) {
                     Cell(MoneyFormat.format(expense), scheme.error),
                     Cell(MoneyFormat.format(net), if (net < 0L) scheme.error else null),
                     Cell(tabPercent(net, income)),
+                    Cell(MoneyFormat.format(due), scheme.error),
+                    Cell(MoneyFormat.format(net - due), if (net - due < 0L) scheme.error else null),
                 )
             }
-            val rows = series.map { m -> line(PersianCalendar.monthName(m.month), m.income, m.expense) } +
+            val rows = series.mapIndexed { i, m -> line(PersianCalendar.monthName(m.month), m.income, m.expense, dueByMonth[i]) } +
                 listOf(
-                    line("جمع", totalIncome, totalExpense),
-                    line("میانگین ماهانه", avgIncome, avgExpense),
+                    line("جمع", totalIncome, totalExpense, totalDue),
+                    line("میانگین ماهانه", avgIncome, avgExpense, avgDue),
                 )
             ReportTable(
-                header = listOf("ماه", "درآمد", "هزینه", "خالص", "پس‌انداز"),
+                header = listOf("ماه", "درآمد", "هزینه", "خالص", "پس‌انداز", "اقساط", "مانده بعد از اقساط"),
                 rows = rows,
                 boldRows = setOf(series.size, series.size + 1),
             )
@@ -364,9 +376,9 @@ internal fun CompareReportTab(data: ReportsData) {
 
     TabScaffold {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // under RTL the right-pointing chevron is "previous"
-            IconButton(onClick = { monthIndex -= 1 }) {
-                TbIcon(R.drawable.ic_tb_chevron_right, "ماه قبل", tint = scheme.onSurface)
+            // the right-pointing chevron (start side under RTL) moves forward to the next month
+            IconButton(onClick = { monthIndex += 1 }) {
+                TbIcon(R.drawable.ic_tb_chevron_right, "ماه بعد", tint = scheme.onSurface)
             }
             Text(
                 text = AccountingFormat.monthTitle(year, month),
@@ -375,8 +387,8 @@ internal fun CompareReportTab(data: ReportsData) {
                 modifier = Modifier.weight(1f),
                 textAlign = TextAlign.Center,
             )
-            IconButton(onClick = { monthIndex += 1 }) {
-                TbIcon(R.drawable.ic_tb_chevron_left, "ماه بعد", tint = scheme.onSurface)
+            IconButton(onClick = { monthIndex -= 1 }) {
+                TbIcon(R.drawable.ic_tb_chevron_left, "ماه قبل", tint = scheme.onSurface)
             }
         }
         ReportSection("مقایسه‌ی هزینه‌ها با " + prevTitle) {
@@ -472,7 +484,7 @@ internal fun CompareReportTab(data: ReportsData) {
 // ---------------------------------------------------------------------------------------------------------------
 
 @Composable
-internal fun WealthReportTab(data: ReportsData) {
+internal fun WealthReportTab(data: ReportsData, onOpenLoans: () -> Unit = {}) {
     val scheme = MaterialTheme.colorScheme
     val current = remember { AccountingFormat.currentMonth() }
     val today = LocalDate.now().toEpochDay()
@@ -533,6 +545,17 @@ internal fun WealthReportTab(data: ReportsData) {
                 WealthLine("اقساط معوق", tabMoney(overdue), scheme.error)
             }
         }
+        ReportSection("وام‌های باز") {
+            val loanRows = remember(data, today) { InstallmentStats.openLoanRows(data.loans, data.installments, today) }
+            if (loanRows.isEmpty()) {
+                TabEmpty()
+            } else {
+                OpenLoansTable(loanRows, onOpen = { id ->
+                    LoanOpenRequest.loanId.value = id
+                    onOpenLoans()
+                })
+            }
+        }
     }
 }
 
@@ -547,4 +570,84 @@ private fun WealthLine(label: String, value: String, color: Color) {
         )
         Text(text = value, style = MaterialTheme.typography.titleMedium, color = color)
     }
+}
+
+private const val LOAN_NAME_COL_DP = 140
+private const val LOAN_COL_DP = 108
+private const val LOAN_COL_COUNT = 5
+
+/** "وام‌های باز" table: one clickable row per open loan plus a total row; scrolls sideways. */
+@Composable
+private fun OpenLoansTable(rows: List<LoanReportRow>, onOpen: (Long) -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    val header = listOf("قسط", "باقیمانده", "مبلغ باقیمانده", "قسط بعدی", "تاریخ اتمام")
+    val totalWidth = (LOAN_NAME_COL_DP + LOAN_COL_DP * LOAN_COL_COUNT).dp
+    Column(modifier = Modifier.horizontalScroll(rememberScrollState())) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
+            LoanCell("نام", LOAN_NAME_COL_DP, TextAlign.Start, scheme.onSurfaceVariant, bold = true)
+            header.forEach { LoanCell(it, LOAN_COL_DP, TextAlign.End, scheme.onSurfaceVariant, bold = true) }
+        }
+        Spacer(Modifier.width(totalWidth).height(1.dp).background(scheme.outlineVariant))
+        rows.forEach { r ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clickable(role = Role.Button) { onOpen(r.loanId) }
+                    .padding(vertical = 6.dp),
+            ) {
+                Row(
+                    modifier = Modifier.width(LOAN_NAME_COL_DP.dp).padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = r.title,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (r.overdue) scheme.error else scheme.onSurface,
+                        maxLines = 1,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (r.overdue) {
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            text = "معوق",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = scheme.error,
+                            maxLines = 1,
+                        )
+                    }
+                }
+                LoanCell(MoneyFormat.format(r.installmentAmount), LOAN_COL_DP, TextAlign.End)
+                LoanCell(
+                    AccountingFormat.digits("${r.remainingCount} از ${r.totalCount}"),
+                    LOAN_COL_DP,
+                    TextAlign.End,
+                )
+                LoanCell(MoneyFormat.format(r.remainingAmount), LOAN_COL_DP, TextAlign.End)
+                LoanCell(r.nextDueDate?.let { AccountingFormat.digits(it) } ?: "—", LOAN_COL_DP, TextAlign.End)
+                LoanCell(r.endDate?.let { AccountingFormat.digits(it) } ?: "—", LOAN_COL_DP, TextAlign.End)
+            }
+        }
+        Spacer(Modifier.width(totalWidth).height(1.dp).background(scheme.outlineVariant))
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
+            LoanCell("جمع", LOAN_NAME_COL_DP, TextAlign.Start, bold = true)
+            LoanCell(MoneyFormat.format(rows.sumOf { it.installmentAmount }), LOAN_COL_DP, TextAlign.End, bold = true)
+            LoanCell("", LOAN_COL_DP, TextAlign.End)
+            LoanCell(MoneyFormat.format(rows.sumOf { it.remainingAmount }), LOAN_COL_DP, TextAlign.End, bold = true)
+            LoanCell("", LOAN_COL_DP, TextAlign.End)
+            LoanCell("", LOAN_COL_DP, TextAlign.End)
+        }
+    }
+}
+
+@Composable
+private fun LoanCell(text: String, widthDp: Int, align: TextAlign, color: Color? = null, bold: Boolean = false) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodySmall,
+        fontWeight = if (bold) FontWeight.Bold else null,
+        color = color ?: MaterialTheme.colorScheme.onSurface,
+        textAlign = align,
+        maxLines = 1,
+        modifier = Modifier.width(widthDp.dp).padding(horizontal = 4.dp),
+    )
 }

@@ -57,6 +57,9 @@ import com.icoordinator.accounting.AccountEntity
 import com.icoordinator.accounting.AccountingBackup
 import com.icoordinator.accounting.AccountingFormat
 import com.icoordinator.accounting.CategoryTotal
+import com.icoordinator.accounting.DueTotals
+import com.icoordinator.accounting.InstallmentEntity
+import com.icoordinator.accounting.InstallmentStats
 import com.icoordinator.accounting.MoneyFormat
 import com.icoordinator.data.BackupManager
 import com.icoordinator.security.LockState
@@ -79,6 +82,7 @@ internal fun DashboardScreen(
     onOpenTransactions: () -> Unit,
     onAdd: () -> Unit,
     onOpenAccounts: () -> Unit,
+    onOpenAccountTx: (Long, Long, Long) -> Unit,
 ) {
     val vm: AccountingViewModel = viewModel(key = "acc_dashboard") {
         AccountingViewModel(ICoordinatorApp.instance.accountingRepository, ICoordinatorApp.instance)
@@ -228,6 +232,7 @@ internal fun DashboardScreen(
                     onPrevMonth = { vm.shiftMonth(-1) },
                     onNextMonth = { vm.shiftMonth(1) },
                     onOpenTransactions = onOpenTransactions,
+                    onOpenAccountTx = onOpenAccountTx,
                 )
             }
         }
@@ -319,20 +324,30 @@ private fun DashboardContent(
     onPrevMonth: () -> Unit,
     onNextMonth: () -> Unit,
     onOpenTransactions: () -> Unit,
+    onOpenAccountTx: (Long, Long, Long) -> Unit,
 ) {
     val accountsFlow = remember { ICoordinatorApp.instance.accountingRepository.observeAccounts() }
     val accounts by accountsFlow.collectAsStateWithLifecycle(initialValue = emptyList<AccountEntity>())
     val byId = remember(accounts) { accounts.associateBy { it.id } }
+    val installmentsFlow = remember { ICoordinatorApp.instance.accountingRepository.observeInstallments() }
+    val installments by installmentsFlow.collectAsStateWithLifecycle(initialValue = emptyList<InstallmentEntity>())
+    val monthRange = remember(state.year, state.month) { AccountingFormat.monthRange(state.year, state.month) }
+    val due = remember(installments, monthRange) { InstallmentStats.dueInRange(installments, monthRange.first, monthRange.last) }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item(key = "month") {
-            MonthCard(state = state, onPrev = onPrevMonth, onNext = onNextMonth)
+            MonthCard(state = state, due = due, onPrev = onPrevMonth, onNext = onNextMonth)
         }
         item(key = "funds") {
-            FundsSection(state = state, byId = byId, onClick = onOpenTransactions)
+            FundsSection(
+                state = state,
+                byId = byId,
+                onClick = onOpenTransactions,
+                onOpenFund = { id -> onOpenAccountTx(id, Long.MIN_VALUE, Long.MAX_VALUE) },
+            )
         }
         item(key = "expense") {
             CategoryPanel(
@@ -340,6 +355,7 @@ private fun DashboardContent(
                 categories = state.expenseCategories,
                 byId = byId,
                 saveKey = "acc_panel_expense",
+                onOpenCategory = { id -> onOpenAccountTx(id, monthRange.first, monthRange.last) },
             )
         }
         item(key = "income") {
@@ -348,6 +364,7 @@ private fun DashboardContent(
                 categories = state.incomeCategories,
                 byId = byId,
                 saveKey = "acc_panel_income",
+                onOpenCategory = { id -> onOpenAccountTx(id, monthRange.first, monthRange.last) },
             )
         }
     }
@@ -367,14 +384,14 @@ private fun CardBox(modifier: Modifier = Modifier, content: @Composable () -> Un
 }
 
 @Composable
-private fun MonthCard(state: DashboardState, onPrev: () -> Unit, onNext: () -> Unit) {
+private fun MonthCard(state: DashboardState, due: DueTotals, onPrev: () -> Unit, onNext: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     CardBox {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // under RTL the right-pointing chevron is "previous"
-                IconButton(onClick = onPrev) {
-                    TbIcon(R.drawable.ic_tb_chevron_right, "ماه قبل", tint = scheme.onSurface)
+                // the right-pointing chevron (shown at the start side under RTL) moves forward to the next month
+                IconButton(onClick = onNext) {
+                    TbIcon(R.drawable.ic_tb_chevron_right, "ماه بعد", tint = scheme.onSurface)
                 }
                 Text(
                     text = AccountingFormat.monthTitle(state.year, state.month),
@@ -383,8 +400,8 @@ private fun MonthCard(state: DashboardState, onPrev: () -> Unit, onNext: () -> U
                     modifier = Modifier.weight(1f),
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
-                IconButton(onClick = onNext) {
-                    TbIcon(R.drawable.ic_tb_chevron_left, "ماه بعد", tint = scheme.onSurface)
+                IconButton(onClick = onPrev) {
+                    TbIcon(R.drawable.ic_tb_chevron_left, "ماه قبل", tint = scheme.onSurface)
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -392,9 +409,18 @@ private fun MonthCard(state: DashboardState, onPrev: () -> Unit, onNext: () -> U
             Spacer(Modifier.height(8.dp))
             AmountLine("هزینه", money(state.expense), scheme.error)
             Spacer(Modifier.height(8.dp))
+            AmountLine("اقساط", money(due.total), scheme.error)
+            Text(
+                text = "پرداخت‌شده " + money(due.paid) + " - مانده " + money(due.unpaid),
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
             HorizontalDivider(color = scheme.outlineVariant)
             Spacer(Modifier.height(8.dp))
             AmountLine("مانده", money(state.income - state.expense), scheme.onSurface)
+            Spacer(Modifier.height(8.dp))
+            AmountLine("مانده بعد از اقساط", money(state.income - state.expense - due.total), scheme.onSurface)
         }
     }
 }
@@ -413,12 +439,17 @@ private fun AmountLine(label: String, value: String, color: androidx.compose.ui.
 }
 
 @Composable
-private fun FundsSection(state: DashboardState, byId: Map<Long, AccountEntity>, onClick: () -> Unit) {
+private fun FundsSection(
+    state: DashboardState,
+    byId: Map<Long, AccountEntity>,
+    onClick: () -> Unit,
+    onOpenFund: (Long) -> Unit,
+) {
     val scheme = MaterialTheme.colorScheme
     Column {
         SectionLabel("صندوق‌ها")
         Spacer(Modifier.height(8.dp))
-        CardBox(modifier = Modifier.clickable(role = Role.Button, onClick = onClick)) {
+        CardBox {
             Column(modifier = Modifier.padding(16.dp)) {
                 if (state.funds.isEmpty()) {
                     Text(
@@ -429,7 +460,10 @@ private fun FundsSection(state: DashboardState, byId: Map<Long, AccountEntity>, 
                 } else {
                     state.funds.forEach { row ->
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(role = Role.Button) { onOpenFund(row.account.id) }
+                                .padding(vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             IconCircle(
@@ -454,7 +488,10 @@ private fun FundsSection(state: DashboardState, byId: Map<Long, AccountEntity>, 
                     Spacer(Modifier.height(4.dp))
                     HorizontalDivider(color = scheme.outlineVariant)
                     Spacer(Modifier.height(8.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable(role = Role.Button, onClick = onClick),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text(
                             text = "جمع موجودی",
                             style = MaterialTheme.typography.titleMedium,
@@ -474,7 +511,13 @@ private fun FundsSection(state: DashboardState, byId: Map<Long, AccountEntity>, 
 }
 
 @Composable
-private fun CategoryPanel(title: String, categories: List<CategoryTotal>, byId: Map<Long, AccountEntity>, saveKey: String) {
+private fun CategoryPanel(
+    title: String,
+    categories: List<CategoryTotal>,
+    byId: Map<Long, AccountEntity>,
+    saveKey: String,
+    onOpenCategory: (Long) -> Unit,
+) {
     val scheme = MaterialTheme.colorScheme
     var expanded by rememberSaveable(saveKey) { mutableStateOf(false) }
     val total = categories.sumOf { it.amount }
@@ -511,7 +554,10 @@ private fun CategoryPanel(title: String, categories: List<CategoryTotal>, byId: 
                     } else {
                         categories.forEach { c ->
                             Row(
-                                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable(role = Role.Button) { onOpenCategory(c.accountId) }
+                                    .padding(vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 IconCircle(icon = accountIcon(c.accountId, byId), size = 36.dp, iconSize = 20.dp)

@@ -48,6 +48,8 @@ import com.icoordinator.accounting.AccountingRepository
 import com.icoordinator.accounting.MoneyFormat
 import com.icoordinator.accounting.TransactionEntity
 import com.icoordinator.accounting.TxType
+import com.icoordinator.domain.PersianCalendar
+import java.time.LocalDate
 import com.icoordinator.ui.components.AppTextField
 import com.icoordinator.ui.components.ConfirmDeleteDialog
 import com.icoordinator.ui.components.DeleteIconButton
@@ -229,6 +231,170 @@ fun TransactionListScreen(onEdit: (Long) -> Unit) {
                     icon = R.drawable.ic_tb_list_details,
                     title = "تراکنشی نیست",
                     message = "با دکمه‌ی + تراکنش ثبت کنید",
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    items(
+                        entries,
+                        key = { entry ->
+                            when (entry) {
+                                is ListEntry.Header -> "d" + entry.epochDay
+                                is ListEntry.Card -> entry.item.tx.id
+                            }
+                        },
+                    ) { entry ->
+                        when (entry) {
+                            is ListEntry.Header -> DayHeader(entry)
+                            is ListEntry.Card -> TxCard(
+                                item = entry.item,
+                                noteExpanded = entry.item.tx.id in expandedNotes,
+                                onToggleNote = {
+                                    val id = entry.item.tx.id
+                                    expandedNotes = if (id in expandedNotes) expandedNotes - id else expandedNotes + id
+                                },
+                                onEdit = { onEdit(entry.item.tx.id) },
+                                onDelete = { pendingDelete = entry.item },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        SnackbarHost(hostState = snackbar, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp))
+    }
+
+    val toDelete = pendingDelete
+    if (toDelete != null) {
+        ConfirmDeleteDialog(
+            itemName = MoneyFormat.format(toDelete.tx.amount) + " تومان",
+            onConfirm = {
+                vm.deleteTransaction(toDelete.tx.id)
+                pendingDelete = null
+            },
+            onDismiss = { pendingDelete = null },
+        )
+    }
+}
+
+/** Ids of the account and all its descendants (cycle-safe). */
+private fun descendantIds(accountId: Long, accounts: List<com.icoordinator.accounting.AccountEntity>): Set<Long> {
+    val children = HashMap<Long, MutableList<Long>>()
+    for (a in accounts) {
+        val p = a.parentId ?: continue
+        children.getOrPut(p) { mutableListOf() }.add(a.id)
+    }
+    val seen = HashSet<Long>()
+    val stack = ArrayDeque<Long>()
+    stack.addLast(accountId)
+    while (stack.isNotEmpty()) {
+        val id = stack.removeLast()
+        if (!seen.add(id)) continue
+        children[id]?.forEach { stack.addLast(it) }
+    }
+    return seen
+}
+
+/** Month title when [from, to] is exactly one Jalali month, else null. */
+private fun rangeMonthTitle(from: Long, to: Long): String? {
+    if (from == Long.MIN_VALUE || to == Long.MAX_VALUE) return null
+    return try {
+        val j = PersianCalendar.toJalali(LocalDate.ofEpochDay(from))
+        val range = AccountingFormat.monthRange(j.year, j.month)
+        if (range.first == from && range.last == to) AccountingFormat.monthTitle(j.year, j.month) else null
+    } catch (e: Exception) {
+        null
+    }
+}
+
+/** Transactions touching the account or any descendant (debit or credit side) with from <= epochDay <= to; header
+ *  = account title (+ " - " + month title when the range is one Jalali month); total line; same cards/edit/delete. */
+@Composable
+fun AccountTransactionsScreen(accountId: Long, fromEpochDay: Long, toEpochDay: Long, onBack: () -> Unit, onEdit: (Long) -> Unit) {
+    val repo = ICoordinatorApp.instance.accountingRepository
+    val vm: TransactionListViewModel = viewModel(key = "acc_account_tx_" + accountId + "_" + fromEpochDay + "_" + toEpochDay) {
+        TransactionListViewModel(repo)
+    }
+    val all by vm.items.collectAsStateWithLifecycle()
+    val accountsFlow = remember { repo.observeAccounts() }
+    val accounts by accountsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    var expandedNotes by remember { mutableStateOf(setOf<Long>()) }
+    var pendingDelete by remember { mutableStateOf<TxItem?>(null) }
+    val snackbar = remember { SnackbarHostState() }
+    val message by vm.message.collectAsStateWithLifecycle()
+    LaunchedEffect(message) {
+        val text = message
+        if (text != null) {
+            snackbar.showSnackbar(text)
+            vm.consumeMessage()
+        }
+    }
+
+    val scope = remember(accountId, accounts) { descendantIds(accountId, accounts) }
+    val account = remember(accountId, accounts) { accounts.firstOrNull { it.id == accountId } }
+    val title = (account?.title ?: "حساب") + (rangeMonthTitle(fromEpochDay, toEpochDay)?.let { " - $it" } ?: "")
+    val showBalance = account != null &&
+        (AccountKind.fromCode(account.kindCode) == AccountKind.FUND || AccountKind.fromCode(account.kindCode) == AccountKind.BANK)
+
+    val shown = remember(all, scope, fromEpochDay, toEpochDay) {
+        all.filter { item ->
+            item.tx.epochDay in fromEpochDay..toEpochDay &&
+                (item.tx.debitAccountId in scope || item.tx.creditAccountId in scope)
+        }
+    }
+    val total = remember(shown, scope) {
+        shown.sumOf { (if (it.tx.debitAccountId in scope) it.tx.amount else 0L) - (if (it.tx.creditAccountId in scope) it.tx.amount else 0L) }
+    }
+    val balance = remember(accounts, all, accountId) {
+        val own = AccountingMath.balances(accounts, all.map { it.tx })
+        AccountingMath.rolledUp(accounts, own)[accountId] ?: 0L
+    }
+    val entries = remember(shown) {
+        buildList<ListEntry> {
+            for ((day, group) in shown.groupBy { it.tx.epochDay }) {
+                val net = group.sumOf {
+                    when (it.type) {
+                        TxType.RECEIVE -> it.tx.amount
+                        TxType.PAY -> -it.tx.amount
+                        else -> 0L
+                    }
+                }
+                val first = group.first().tx.date
+                add(ListEntry.Header(day, AccountingFormat.dayHeader(first).ifEmpty { AccountingFormat.digits(first) }, net))
+                group.forEach { add(ListEntry.Card(it)) }
+            }
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            PageHeader(title = title, onBack = onBack)
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (showBalance) {
+                    Text(
+                        text = "موجودی فعلی: " + MoneyFormat.format(balance) + " تومان",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                Text(
+                    text = "جمع: " + MoneyFormat.format(total) + " تومان",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            if (entries.isEmpty()) {
+                EmptyState(
+                    icon = R.drawable.ic_tb_list_details,
+                    title = "تراکنشی نیست",
+                    message = "برای این حساب در این بازه تراکنشی ثبت نشده است",
                 )
             } else {
                 LazyColumn(

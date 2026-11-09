@@ -61,8 +61,12 @@ object AccRoutes {
     const val LOANS = "acc_loans"
     const val ACCOUNTS = "acc_accounts"
     const val TX_FORM = "acc_tx_form/{type}?id={id}"
+    const val ACCOUNT_TX = "acc_account_tx/{accountId}?from={from}&to={to}"
 
     fun txForm(type: TxType, id: Long? = null): String = "acc_tx_form/${type.name}?id=${id ?: -1L}"
+
+    fun accountTx(accountId: Long, from: Long = Long.MIN_VALUE, to: Long = Long.MAX_VALUE): String =
+        "acc_account_tx/$accountId?from=$from&to=$to"
 }
 
 /** Icon per account kind (D62). */
@@ -124,7 +128,7 @@ fun AccountingNavHost(onExit: () -> Unit) {
     val backStack by navController.currentBackStackEntryAsState()
     val current = backStack?.destination?.route
     // full-screen routes hide the bottom bar
-    val onForm = current == AccRoutes.TX_FORM || current == AccRoutes.ACCOUNTS
+    val onForm = current == AccRoutes.TX_FORM || current == AccRoutes.ACCOUNTS || current == AccRoutes.ACCOUNT_TX
     var showAdd by remember { mutableStateOf(false) }
 
     fun goTab(route: String) {
@@ -162,6 +166,9 @@ fun AccountingNavHost(onExit: () -> Unit) {
                     onOpenTransactions = { goTab(AccRoutes.TRANSACTIONS) },
                     onAdd = { showAdd = true },
                     onOpenAccounts = { navController.navigate(AccRoutes.ACCOUNTS) },
+                    onOpenAccountTx = { accountId, from, to ->
+                        navController.navigate(AccRoutes.accountTx(accountId, from, to))
+                    },
                 )
             }
             composable(AccRoutes.TRANSACTIONS) {
@@ -169,9 +176,31 @@ fun AccountingNavHost(onExit: () -> Unit) {
                     onEdit = { id -> navController.navigate(AccRoutes.txForm(TxType.OTHER, id)) },
                 )
             }
-            composable(AccRoutes.REPORTS) { ReportsScreen() }
+            composable(AccRoutes.REPORTS) { ReportsScreen(onOpenLoans = { goTab(AccRoutes.LOANS) }) }
             composable(AccRoutes.LOANS) { LoansScreen() }
             composable(AccRoutes.ACCOUNTS) { AccountsScreen(onBack = { navController.popBackStack() }) }
+            composable(
+                AccRoutes.ACCOUNT_TX,
+                arguments = listOf(
+                    navArgument("accountId") { type = NavType.LongType },
+                    navArgument("from") {
+                        type = NavType.LongType
+                        defaultValue = Long.MIN_VALUE
+                    },
+                    navArgument("to") {
+                        type = NavType.LongType
+                        defaultValue = Long.MAX_VALUE
+                    },
+                ),
+            ) { entry ->
+                AccountTransactionsScreen(
+                    accountId = entry.arguments?.getLong("accountId") ?: -1L,
+                    fromEpochDay = entry.arguments?.getLong("from") ?: Long.MIN_VALUE,
+                    toEpochDay = entry.arguments?.getLong("to") ?: Long.MAX_VALUE,
+                    onBack = { navController.popBackStack() },
+                    onEdit = { id -> navController.navigate(AccRoutes.txForm(TxType.OTHER, id)) },
+                )
+            }
             composable(
                 AccRoutes.TX_FORM,
                 arguments = listOf(

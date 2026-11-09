@@ -6,6 +6,7 @@ import android.content.ContextWrapper
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.biometric.BiometricManager
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +30,7 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -89,6 +91,8 @@ fun SettingsScreen(onBack: () -> Unit) {
     val snackbar = remember { SnackbarHostState() }
 
     val themeMode by AppSettings.themeMode.collectAsState()
+    val biometricEnabled by AppSettings.biometricEnabled.collectAsState()
+    val allowScreenshots by AppSettings.allowScreenshots.collectAsState()
     var lockTimeout by remember { mutableStateOf(AppSettings.lockTimeoutMs()) }
     var showChangePin by remember { mutableStateOf(false) }
     var pendingRestore by remember { mutableStateOf<android.net.Uri?>(null) }
@@ -96,6 +100,16 @@ fun SettingsScreen(onBack: () -> Unit) {
 
     val lockManager = remember { LockManager(context.applicationContext) }
     val backup = remember { BackupManager(ICoordinatorApp.instance) }
+    val hasPin = remember { lockManager.hasPin() }
+    val biometricAvailable = remember {
+        try {
+            BiometricManager.from(context).canAuthenticate(
+                BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.BIOMETRIC_WEAK,
+            ) == BiometricManager.BIOMETRIC_SUCCESS
+        } catch (e: Exception) {
+            false
+        }
+    }
     val versionName = remember {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }
             .getOrNull() ?: ""
@@ -179,6 +193,24 @@ fun SettingsScreen(onBack: () -> Unit) {
                             )
                         }
                     }
+                    SwitchRow(
+                        title = "ورود با اثر انگشت",
+                        hint = when {
+                            !hasPin -> "ابتدا رمز تعیین کنید"
+                            !biometricAvailable -> "این گوشی پشتیبانی نمی‌کند"
+                            else -> null
+                        },
+                        checked = biometricEnabled && hasPin && biometricAvailable,
+                        enabled = hasPin && biometricAvailable,
+                        onCheckedChange = { AppSettings.setBiometricEnabled(it) },
+                    )
+                    SwitchRow(
+                        title = "اجازه‌ی اسکرین‌شات",
+                        hint = "اگر خاموش باشد، صفحه در اسکرین‌شات و لیست برنامه‌های اخیر دیده نمی‌شود",
+                        checked = allowScreenshots,
+                        enabled = true,
+                        onCheckedChange = { AppSettings.setAllowScreenshots(it) },
+                    )
                 }
 
                 SettingsCard("پشتیبان‌گیری") {
@@ -305,6 +337,32 @@ private fun SettingsCard(title: String, content: @Composable () -> Unit) {
                 content()
             }
         }
+    }
+}
+
+@Composable
+private fun SwitchRow(title: String, hint: String?, checked: Boolean, enabled: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (enabled) scheme.onSurface else scheme.onSurface.copy(alpha = 0.5f),
+            )
+            if (hint != null) {
+                Text(
+                    text = hint,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant,
+                )
+            }
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled)
     }
 }
 

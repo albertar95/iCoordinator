@@ -48,7 +48,10 @@ import com.icoordinator.accounting.AccountingFormat
 import com.icoordinator.accounting.AccountingMath
 import com.icoordinator.accounting.AccountingRepository
 import com.icoordinator.accounting.CategoryTotal
+import com.icoordinator.accounting.DueTotals
 import com.icoordinator.accounting.InstallmentEntity
+import com.icoordinator.accounting.InstallmentStats
+import com.icoordinator.accounting.LoanEntity
 import com.icoordinator.accounting.MonthTotals
 import com.icoordinator.accounting.MoneyFormat
 import com.icoordinator.accounting.ReportMath
@@ -89,6 +92,8 @@ data class ReportsState(
     val rangeTitle: String = "",
     val income: Long = 0,
     val expense: Long = 0,
+    /** Installments due in the selected range (paid / unpaid). */
+    val due: DueTotals = DueTotals(0L, 0L),
     /** Average expense per day of the range (days up to today), or null when the range has not started. */
     val avgDailyExpense: Long? = null,
     val expenseSlices: List<CategoryTotal> = emptyList(),
@@ -105,13 +110,14 @@ data class ReportsData(
     val accounts: List<AccountEntity> = emptyList(),
     val txs: List<TransactionEntity> = emptyList(),
     val installments: List<InstallmentEntity> = emptyList(),
+    val loans: List<LoanEntity> = emptyList(),
 )
 
 class ReportsViewModel(repo: AccountingRepository) : ViewModel() {
 
     val data: StateFlow<ReportsData> =
-        combine(repo.observeAccounts(), repo.observeTransactions(), repo.observeInstallments()) { accounts, txs, installments ->
-            ReportsData(loaded = true, accounts = accounts, txs = txs, installments = installments)
+        combine(repo.observeAccounts(), repo.observeTransactions(), repo.observeInstallments(), repo.observeLoans()) { accounts, txs, installments, loans ->
+            ReportsData(loaded = true, accounts = accounts, txs = txs, installments = installments, loans = loans)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReportsData())
 
     private val period = MutableStateFlow(
@@ -119,8 +125,8 @@ class ReportsViewModel(repo: AccountingRepository) : ViewModel() {
     )
 
     val state: StateFlow<ReportsState> =
-        combine(repo.observeAccounts(), repo.observeTransactions(), period) { accounts, txs, p ->
-            compute(accounts, txs, p)
+        combine(repo.observeAccounts(), repo.observeTransactions(), period, repo.observeInstallments()) { accounts, txs, p, installments ->
+            compute(accounts, txs, installments, p)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReportsState())
 
     fun selectThisMonth() {
@@ -158,6 +164,7 @@ class ReportsViewModel(repo: AccountingRepository) : ViewModel() {
     private fun compute(
         accounts: List<com.icoordinator.accounting.AccountEntity>,
         txs: List<com.icoordinator.accounting.TransactionEntity>,
+        installments: List<InstallmentEntity>,
         p: ReportPeriod,
     ): ReportsState {
         val today = LocalDate.now().toEpochDay()
@@ -223,6 +230,7 @@ class ReportsViewModel(repo: AccountingRepository) : ViewModel() {
             rangeTitle = title,
             income = totals.income,
             expense = totals.expense,
+            due = InstallmentStats.dueInRange(installments, from, to),
             avgDailyExpense = avg,
             expenseSlices = expenseSlices,
             incomeSlices = incomeSlices,
@@ -248,7 +256,7 @@ private fun percentLabel(percent: Double): String {
 }
 
 @Composable
-fun ReportsScreen() {
+fun ReportsScreen(onOpenLoans: () -> Unit = {}) {
     val vm: ReportsViewModel = viewModel(key = "acc_reports") {
         ReportsViewModel(ICoordinatorApp.instance.accountingRepository)
     }
@@ -265,7 +273,7 @@ fun ReportsScreen() {
                 1 -> MonthlyReportTab(data)
                 2 -> AccountReportTab(data)
                 3 -> CompareReportTab(data)
-                else -> WealthReportTab(data)
+                else -> WealthReportTab(data, onOpenLoans)
             }
         }
         if (state.loaded && tab == 0) {
@@ -366,9 +374,9 @@ private fun PeriodSelector(
         Spacer(Modifier.height(8.dp))
         if (state.mode == MODE_MONTH) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // under RTL the right-pointing chevron is "previous"
-                IconButton(onClick = { onShift(-1) }) {
-                    TbIcon(R.drawable.ic_tb_chevron_right, "ماه قبل", tint = scheme.onSurface)
+                // the right-pointing chevron (start side under RTL) moves forward to the next month
+                IconButton(onClick = { onShift(1) }) {
+                    TbIcon(R.drawable.ic_tb_chevron_right, "ماه بعد", tint = scheme.onSurface)
                 }
                 Text(
                     text = state.rangeTitle,
@@ -377,8 +385,8 @@ private fun PeriodSelector(
                     modifier = Modifier.weight(1f),
                     textAlign = TextAlign.Center,
                 )
-                IconButton(onClick = { onShift(1) }) {
-                    TbIcon(R.drawable.ic_tb_chevron_left, "ماه بعد", tint = scheme.onSurface)
+                IconButton(onClick = { onShift(-1) }) {
+                    TbIcon(R.drawable.ic_tb_chevron_left, "ماه قبل", tint = scheme.onSurface)
                 }
             }
         } else {
@@ -453,12 +461,25 @@ private fun SummarySection(state: ReportsState) {
         Spacer(Modifier.height(8.dp))
         SummaryLine("هزینه", money(state.expense), scheme.error)
         Spacer(Modifier.height(8.dp))
+        SummaryLine("اقساط", money(state.due.total), scheme.error)
+        Text(
+            text = "پرداخت‌شده " + money(state.due.paid) + " - مانده " + money(state.due.unpaid),
+            style = MaterialTheme.typography.bodySmall,
+            color = scheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(8.dp))
         HorizontalDivider(color = scheme.outlineVariant)
         Spacer(Modifier.height(8.dp))
         SummaryLine(
             "خالص",
             money(net),
             if (net < 0L) scheme.error else txTypeColor(TxType.RECEIVE),
+        )
+        Spacer(Modifier.height(8.dp))
+        SummaryLine(
+            "مانده بعد از اقساط",
+            money(net - state.due.total),
+            if (net - state.due.total < 0L) scheme.error else txTypeColor(TxType.RECEIVE),
         )
         Spacer(Modifier.height(8.dp))
         SummaryLine(
