@@ -2,6 +2,9 @@ package com.icoordinator
 
 import android.app.Application
 import androidx.room.Room
+import com.icoordinator.accounting.AccountingDatabase
+import com.icoordinator.accounting.AccountingRepository
+import com.icoordinator.accounting.InstallmentReminders
 import com.icoordinator.alarm.AlarmRescheduler
 import com.icoordinator.alarm.TaskAlarmScheduler
 import com.icoordinator.data.AppDatabase
@@ -16,6 +19,7 @@ class ICoordinatorApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        InstallmentReminders.start(this)
     }
 
     val database: AppDatabase by lazy {
@@ -45,6 +49,14 @@ class ICoordinatorApp : Application() {
 
     val alarmRescheduler: AlarmRescheduler by lazy {
         AlarmRescheduler(database.taskDao(), database.routineDao(), alarmScheduler)
+    }
+
+    val accountingDatabase: AccountingDatabase by lazy {
+        Room.databaseBuilder(this, AccountingDatabase::class.java, AccountingDatabase.DB_NAME).build()
+    }
+
+    val accountingRepository: AccountingRepository by lazy {
+        AccountingRepository(accountingDatabase)
     }
 
     companion object {

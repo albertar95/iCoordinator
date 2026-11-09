@@ -72,3 +72,4 @@ Scope by recommendation (D38; user can change):
 - Entry point: a settings icon in the top bar of the main screens (bottom bar unchanged).
 - Notes: backup file is not encrypted (personal app; user keeps the file) - flag; allowBackup=false stays, so this export is the only backup path.
 - Status 2026-11-06: C9-C13 coded (sprints T28-T41 + fixes F01-F03), written to the project, not built yet. Backups: handover/backup-phase3-2026-11-06/.
+- 2026-11-06 19:14: C1-C13 installed on the phone as version 2.1.2; user confirmed all good. Next changes start at C14.

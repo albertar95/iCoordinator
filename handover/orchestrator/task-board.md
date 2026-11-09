@@ -24,7 +24,7 @@
 - S1: 116.1k tokens, 1.8 min. S2: 153.3k, 2.8 min. S3: 132.3k, 1.8 min. R: 243.8k, 8.2 min. F: 100.6k, 0.7 min.
 
 ## Status
-34 files written to the project 2026-11-06 (CRLF kept). Not compiled yet: waiting for push.bat + GitHub Actions, then phone test (handover/PHASE3-TEST-GUIDE.md; covers phase 2 too via PHASE2-TEST-GUIDE.md).
+Built on GitHub Actions and installed on the phone as 2.1.2 (2026-11-06 19:14); user confirmed all good. Install fix: fixed signing key (D50); data rescued with adb and restored through Settings (5 projects, 22 goals, 130 tasks, 2 routines).
 
 ## Phase 2
-T16-T27 + R1 accepted (see backup and older notes); built status unknown (push not reported).
+T16-T27 + R1 accepted; shipped in 2.1.2.

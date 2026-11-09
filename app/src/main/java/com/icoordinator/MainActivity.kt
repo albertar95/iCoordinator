@@ -27,7 +27,7 @@ import com.icoordinator.security.LockManager
 import com.icoordinator.security.LockState
 import com.icoordinator.settings.AppSettings
 import com.icoordinator.settings.ThemeMode
-import com.icoordinator.ui.AppNavHost
+import com.icoordinator.ui.RootNavHost
 import com.icoordinator.ui.lock.LockScreen
 import com.icoordinator.ui.theme.ICoordinatorTheme
 import kotlinx.coroutines.Dispatchers
@@ -79,7 +79,7 @@ class MainActivity : ComponentActivity() {
                                 locked = false
                             }
                         } else {
-                            AppNavHost()
+                            RootNavHost()
                         }
                     }
                 }
