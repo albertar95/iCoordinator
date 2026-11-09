@@ -4,11 +4,25 @@ import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 
+/** Runs a block in one database transaction (Room in the app, a plain call in unit tests). */
+interface TransactionRunner {
+    suspend fun <R> run(block: suspend () -> R): R
+}
+
 /** Single entry point of the accounting section; wraps [AccountingDao] and applies [AccountingMath] rules. */
-class AccountingRepository(
-    private val db: AccountingDatabase,
-    private val dao: AccountingDao = db.accountingDao(),
+class AccountingRepository internal constructor(
+    private val dao: AccountingDao,
+    private val runner: TransactionRunner,
 ) {
+
+    constructor(db: AccountingDatabase, dao: AccountingDao = db.accountingDao()) : this(
+        dao,
+        object : TransactionRunner {
+            override suspend fun <R> run(block: suspend () -> R): R = db.withTransaction { block() }
+        },
+    )
+
+    private suspend fun <R> withTransaction(block: suspend () -> R): R = runner.run(block)
 
     fun observeAccounts(): Flow<List<AccountEntity>> = dao.observeAccounts()
 
@@ -31,7 +45,7 @@ class AccountingRepository(
 
     /** Deletes the transaction; if it paid an installment, that installment becomes unpaid again. */
     suspend fun deleteTransaction(id: Long) {
-        db.withTransaction {
+        withTransaction {
             val tx = dao.getTransaction(id)
             val installmentId = tx?.installmentId
             if (installmentId != null) {
@@ -48,7 +62,7 @@ class AccountingRepository(
 
     /** Saves the loan and replaces its installments (ids reset, seq renumbered by due day then given order). Returns the loan id. */
     suspend fun saveLoan(loan: LoanEntity, installments: List<InstallmentEntity>): Long =
-        db.withTransaction {
+        withTransaction {
             val loanId = dao.upsertLoan(loan)
             dao.deleteInstallments(loanId)
             val renumbered = installments
@@ -83,7 +97,7 @@ class AccountingRepository(
         val firstDue = AccountingMath.normalizeDate(firstDueDate)
             ?: throw IllegalArgumentException("تاریخ اولین قسط نامعتبر است")
 
-        return db.withTransaction {
+        return withTransaction {
             val accounts = dao.getAccounts()
             if (fundAccountId != null) {
                 require(accounts.any { it.id == fundAccountId }) { "صندوق پیدا نشد" }
@@ -150,7 +164,7 @@ class AccountingRepository(
 
     /** Deletes the loan and its installments; transactions stay. */
     suspend fun deleteLoan(loanId: Long) {
-        db.withTransaction {
+        withTransaction {
             dao.deleteInstallments(loanId)
             dao.deleteLoan(loanId)
         }
@@ -158,7 +172,7 @@ class AccountingRepository(
 
     /** Pays an installment from [fromAccountId]. Returns the id of the created transaction. */
     suspend fun payInstallment(installmentId: Long, fromAccountId: Long, date: String, time: String): Long =
-        db.withTransaction {
+        withTransaction {
             val installment = dao.getInstallment(installmentId)
                 ?: throw IllegalArgumentException("قسط پیدا نشد")
             if (installment.isPaid) return@withTransaction installment.paidTransactionId ?: 0L
@@ -188,7 +202,7 @@ class AccountingRepository(
 
     /** Reverts a payment: deletes the linked transaction, marks the installment unpaid and reopens the loan. */
     suspend fun unpayInstallment(installmentId: Long) {
-        db.withTransaction {
+        withTransaction {
             val installment = dao.getInstallment(installmentId)
                 ?: throw IllegalArgumentException("قسط پیدا نشد")
             installment.paidTransactionId?.let { dao.deleteTransaction(it) }
@@ -199,7 +213,7 @@ class AccountingRepository(
 
     /** Replaces the whole database content with an import result (ids kept). */
     suspend fun replaceAll(result: ImportResult) {
-        db.withTransaction {
+        withTransaction {
             dao.clearInstallments()
             dao.clearLoans()
             dao.clearTransactions()

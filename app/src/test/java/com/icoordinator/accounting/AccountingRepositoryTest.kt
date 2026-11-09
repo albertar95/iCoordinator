@@ -87,13 +87,14 @@ class FakeAccountingDao : AccountingDao {
     override suspend fun clearAccounts() { accounts.value = emptyList() }
 }
 
-class FakeAccountingDatabase(private val fake: FakeAccountingDao) : AccountingDatabase() {
-    override fun accountingDao(): AccountingDao = fake
+/** Runs the block directly (no real database in JVM unit tests). */
+object DirectTransactionRunner : TransactionRunner {
+    override suspend fun <R> run(block: suspend () -> R): R = block()
 }
 
 class AccountingRepositoryTest {
     private val dao = FakeAccountingDao()
-    private val repo = AccountingRepository(FakeAccountingDatabase(dao))
+    private val repo = AccountingRepository(dao, DirectTransactionRunner)
 
     private fun newFund(): Long = runBlocking {
         val root = dao.upsertAccount(AccountEntity(parentId = null, title = "صندوق", kindCode = AccountKind.FUND.code))
