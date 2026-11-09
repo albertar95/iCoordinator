@@ -53,6 +53,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.icoordinator.ICoordinatorApp
 import com.icoordinator.R
+import com.icoordinator.accounting.AccountEntity
 import com.icoordinator.accounting.AccountingBackup
 import com.icoordinator.accounting.AccountingFormat
 import com.icoordinator.accounting.CategoryTotal
@@ -319,6 +320,9 @@ private fun DashboardContent(
     onNextMonth: () -> Unit,
     onOpenTransactions: () -> Unit,
 ) {
+    val accountsFlow = remember { ICoordinatorApp.instance.accountingRepository.observeAccounts() }
+    val accounts by accountsFlow.collectAsStateWithLifecycle(initialValue = emptyList<AccountEntity>())
+    val byId = remember(accounts) { accounts.associateBy { it.id } }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 24.dp),
@@ -328,12 +332,13 @@ private fun DashboardContent(
             MonthCard(state = state, onPrev = onPrevMonth, onNext = onNextMonth)
         }
         item(key = "funds") {
-            FundsSection(state = state, onClick = onOpenTransactions)
+            FundsSection(state = state, byId = byId, onClick = onOpenTransactions)
         }
         item(key = "expense") {
             CategoryPanel(
                 title = "هزینه‌های این ماه",
                 categories = state.expenseCategories,
+                byId = byId,
                 saveKey = "acc_panel_expense",
             )
         }
@@ -341,6 +346,7 @@ private fun DashboardContent(
             CategoryPanel(
                 title = "درآمدهای این ماه",
                 categories = state.incomeCategories,
+                byId = byId,
                 saveKey = "acc_panel_income",
             )
         }
@@ -407,7 +413,7 @@ private fun AmountLine(label: String, value: String, color: androidx.compose.ui.
 }
 
 @Composable
-private fun FundsSection(state: DashboardState, onClick: () -> Unit) {
+private fun FundsSection(state: DashboardState, byId: Map<Long, AccountEntity>, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     Column {
         SectionLabel("صندوق‌ها")
@@ -426,7 +432,11 @@ private fun FundsSection(state: DashboardState, onClick: () -> Unit) {
                             modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            IconCircle(icon = accountKindIcon(row.kind), size = 40.dp, iconSize = 22.dp)
+                            IconCircle(
+                                icon = if (row.account.id in byId) accountIcon(row.account.id, byId) else accountKindIcon(row.kind),
+                                size = 40.dp,
+                                iconSize = 22.dp,
+                            )
                             Spacer(Modifier.width(12.dp))
                             Text(
                                 text = row.account.title,
@@ -464,7 +474,7 @@ private fun FundsSection(state: DashboardState, onClick: () -> Unit) {
 }
 
 @Composable
-private fun CategoryPanel(title: String, categories: List<CategoryTotal>, saveKey: String) {
+private fun CategoryPanel(title: String, categories: List<CategoryTotal>, byId: Map<Long, AccountEntity>, saveKey: String) {
     val scheme = MaterialTheme.colorScheme
     var expanded by rememberSaveable(saveKey) { mutableStateOf(false) }
     val total = categories.sumOf { it.amount }
@@ -484,7 +494,7 @@ private fun CategoryPanel(title: String, categories: List<CategoryTotal>, saveKe
                     modifier = Modifier.weight(1f),
                 )
                 TbIcon(
-                    icon = R.drawable.ic_tb_chevron_left,
+                    icon = R.drawable.ic_tb_chevron_right,
                     contentDescription = if (expanded) "بستن" else "باز کردن",
                     modifier = Modifier.rotate(if (expanded) 90f else 0f),
                     tint = scheme.onSurfaceVariant,
@@ -504,6 +514,8 @@ private fun CategoryPanel(title: String, categories: List<CategoryTotal>, saveKe
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
+                                IconCircle(icon = accountIcon(c.accountId, byId), size = 36.dp, iconSize = 20.dp)
+                                Spacer(Modifier.width(12.dp))
                                 Text(
                                     text = c.title,
                                     style = MaterialTheme.typography.bodyLarge,

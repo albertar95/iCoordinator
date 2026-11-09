@@ -72,7 +72,7 @@ private fun HomeMenu(onOpenTasks: () -> Unit, onOpenAccounting: () -> Unit) {
             .statusBarsPadding()
             .verticalScroll(rememberScrollState()),
     ) {
-        PageHeader(title = "آی‌کوردینیتور")
+        PageHeader(title = "iCoordinator")
         Text(
             text = "یک بخش را انتخاب کنید",
             style = MaterialTheme.typography.bodyMedium,
@@ -131,6 +131,6 @@ private fun HomeCard(@DrawableRes icon: Int, title: String, subtitle: String, on
                 color = scheme.onSurfaceVariant,
             )
         }
-        TbIcon(R.drawable.ic_tb_chevron_left, null, tint = scheme.onSurfaceVariant)
+        TbIcon(R.drawable.ic_tb_chevron_right, null, tint = scheme.onSurfaceVariant)
     }
 }

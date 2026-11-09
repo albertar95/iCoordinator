@@ -3,7 +3,7 @@ Prompt version: Orchestrator v6.8 - Last updated: 2026-11-09 13:30 - Mode: Auto 
 
 ## In one minute
 Last time: All 3 sprints + independent review + fixes done and committed (version 2.2.0). Home menu, accounting (dashboard, transactions, loans with reminders, reports, accounts, Parmis import, accounting backup/restore).
-Now: delivered; waiting for the user's CI build and phone test.
+Now: sprint 4 (user feedback items 1-6) committed as 2.2.1; waiting for CI and the user's test.
 Next: if CI fails, read the error log and fix (Compose code was never compiled; pure code: 83 tests pass locally). Then user acceptance: import .par, check D52 numbers.
 
 ## Goal

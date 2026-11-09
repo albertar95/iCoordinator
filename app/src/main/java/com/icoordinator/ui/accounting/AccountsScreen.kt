@@ -44,6 +44,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.icoordinator.ICoordinatorApp
 import com.icoordinator.R
 import com.icoordinator.accounting.AccountEntity
+import com.icoordinator.accounting.AccountIcons
 import com.icoordinator.accounting.AccountKind
 import com.icoordinator.accounting.AccountingFormat
 import com.icoordinator.accounting.AccountingMath
@@ -107,15 +108,21 @@ class AccountsViewModel(private val repo: AccountingRepository) : ViewModel() {
         return if (duplicate) ERROR_DUPLICATE else null
     }
 
-    fun addChild(parent: AccountEntity, title: String, openingBalance: Long) {
+    fun addChild(parent: AccountEntity, title: String, openingBalance: Long, icon: String = "") {
         save(
             AccountEntity(
                 parentId = parent.id,
                 title = title.trim(),
                 kindCode = parent.kindCode,
                 openingBalance = openingBalance,
+                icon = icon,
             ),
         )
+    }
+
+    /** [icon] = AccountIcons name, or "" to inherit from the parent / fall back to the kind icon. */
+    fun setIcon(account: AccountEntity, icon: String) {
+        save(account.copy(icon = icon))
     }
 
     fun rename(account: AccountEntity, title: String) {
@@ -152,6 +159,7 @@ fun AccountsScreen(onBack: () -> Unit) {
     var toggled by remember { mutableStateOf(setOf<Long>()) }
     var addParent by remember { mutableStateOf<AccountEntity?>(null) }
     var renameTarget by remember { mutableStateOf<AccountEntity?>(null) }
+    var iconTarget by remember { mutableStateOf<AccountEntity?>(null) }
 
     LaunchedEffect(message) {
         val text = message
@@ -221,6 +229,7 @@ fun AccountsScreen(onBack: () -> Unit) {
                         val expanded = (account.parentId == null) != (account.id in toggled)
                         AccountRow(
                             account = account,
+                            icon = accountIcon(account.id, byId),
                             depth = depth,
                             subtitle = if (q.isEmpty()) null else AccountingFormat.accountPath(account.id, byId),
                             balanceText = MoneyFormat.format(state.rolledBalances[account.id] ?: 0L),
@@ -231,6 +240,7 @@ fun AccountsScreen(onBack: () -> Unit) {
                             },
                             onAdd = { addParent = account },
                             onRename = { renameTarget = account },
+                            onIconClick = { iconTarget = account },
                             onEnabledChange = { vm.setEnabled(account, it) },
                         )
                     }
@@ -247,10 +257,12 @@ fun AccountsScreen(onBack: () -> Unit) {
             title = "حساب جدید زیر " + parent.title,
             initialName = "",
             showOpeningBalance = kind in OPENING_KINDS,
+            showIcon = true,
+            inheritedIcon = accountIcon(parent.id, byId),
             confirmText = "افزودن",
             validate = { vm.validateName(parent.id, null, it) },
-            onConfirm = { name, balance ->
-                vm.addChild(parent, name, balance)
+            onConfirm = { name, balance, icon ->
+                vm.addChild(parent, name, balance, icon = icon ?: "")
                 addParent = null
                 // make the new child visible
                 if (parent.parentId == null) {
@@ -271,11 +283,23 @@ fun AccountsScreen(onBack: () -> Unit) {
             showOpeningBalance = false,
             confirmText = "ذخیره",
             validate = { vm.validateName(target.parentId, target.id, it) },
-            onConfirm = { name, _ ->
+            onConfirm = { name, _, _ ->
                 vm.rename(target, name)
                 renameTarget = null
             },
             onDismiss = { renameTarget = null },
+        )
+    }
+
+    val iconAccount = iconTarget
+    if (iconAccount != null) {
+        IconPickerDialog(
+            selected = iconAccount.icon.takeIf { it in AccountIcons.NAMES },
+            onDismiss = { iconTarget = null },
+            onPick = { name ->
+                vm.setIcon(iconAccount, name ?: "")
+                iconTarget = null
+            },
         )
     }
 }
@@ -283,6 +307,7 @@ fun AccountsScreen(onBack: () -> Unit) {
 @Composable
 private fun AccountRow(
     account: AccountEntity,
+    icon: Int,
     depth: Int,
     subtitle: String?,
     balanceText: String,
@@ -291,6 +316,7 @@ private fun AccountRow(
     onToggle: () -> Unit,
     onAdd: () -> Unit,
     onRename: () -> Unit,
+    onIconClick: () -> Unit,
     onEnabledChange: (Boolean) -> Unit,
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -304,7 +330,8 @@ private fun AccountRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconCircle(
-            icon = accountKindIcon(AccountKind.fromCode(account.kindCode)),
+            icon = icon,
+            modifier = Modifier.clickable(role = Role.Button, onClick = onIconClick),
             size = 40.dp,
             iconSize = 22.dp,
         )
@@ -329,7 +356,7 @@ private fun AccountRow(
         }
         if (hasChildren) {
             TbIcon(
-                icon = R.drawable.ic_tb_chevron_left,
+                icon = R.drawable.ic_tb_chevron_right,
                 contentDescription = if (expanded) "بستن" else "باز کردن",
                 modifier = Modifier.rotate(if (expanded) 90f else 0f),
                 tint = scheme.onSurfaceVariant,
@@ -355,13 +382,28 @@ private fun NameDialog(
     showOpeningBalance: Boolean,
     confirmText: String,
     validate: (String) -> String?,
-    onConfirm: (name: String, openingBalance: Long) -> Unit,
+    onConfirm: (name: String, openingBalance: Long, icon: String?) -> Unit,
     onDismiss: () -> Unit,
+    showIcon: Boolean = false,
+    inheritedIcon: Int = R.drawable.ic_tb_category,
 ) {
     var name by remember { mutableStateOf(initialName) }
     var balanceText by remember { mutableStateOf("") }
     var nameError by remember { mutableStateOf<String?>(null) }
     var balanceError by remember { mutableStateOf<String?>(null) }
+    var icon by remember { mutableStateOf<String?>(null) }
+    var pickerOpen by remember { mutableStateOf(false) }
+
+    if (pickerOpen) {
+        IconPickerDialog(
+            selected = icon,
+            onDismiss = { pickerOpen = false },
+            onPick = {
+                icon = it
+                pickerOpen = false
+            },
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -393,6 +435,17 @@ private fun NameDialog(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
+                if (showIcon) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconCircle(
+                            icon = icon?.let { iconRes(it) } ?: inheritedIcon,
+                            modifier = Modifier.clickable(role = Role.Button) { pickerOpen = true },
+                            size = 40.dp,
+                            iconSize = 22.dp,
+                        )
+                        TextButton(onClick = { pickerOpen = true }) { Text("تغییر آیکون") }
+                    }
+                }
             }
         },
         confirmButton = {
@@ -405,7 +458,7 @@ private fun NameDialog(
                     } else if (balance == null) {
                         balanceError = "مبلغ نامعتبر است"
                     } else {
-                        onConfirm(name.trim(), balance)
+                        onConfirm(name.trim(), balance, icon)
                     }
                 },
             ) { Text(confirmText) }

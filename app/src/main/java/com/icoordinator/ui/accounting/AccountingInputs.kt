@@ -44,7 +44,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.icoordinator.R
 import com.icoordinator.accounting.AccountEntity
-import com.icoordinator.accounting.AccountKind
 import com.icoordinator.accounting.AccountingFormat
 import com.icoordinator.accounting.AmountExpression
 import com.icoordinator.accounting.MoneyFormat
@@ -111,6 +110,7 @@ fun AccountPickerDialog(
                             items(matches, key = { it.id }) { a ->
                                 PickerRow(
                                     account = a,
+                                    icon = accountIcon(a.id, byId),
                                     subtitle = AccountingFormat.accountPath(a.id, byId),
                                     depth = 0,
                                     enabled = true,
@@ -146,6 +146,7 @@ fun AccountPickerDialog(
                                 }
                                 PickerRow(
                                     account = a,
+                                    icon = accountIcon(a.id, byId),
                                     subtitle = null,
                                     depth = depth,
                                     enabled = ok,
@@ -173,6 +174,7 @@ private fun EmptyHint(text: String) {
 @Composable
 private fun PickerRow(
     account: AccountEntity,
+    icon: Int,
     subtitle: String?,
     depth: Int,
     enabled: Boolean,
@@ -191,7 +193,7 @@ private fun PickerRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconCircle(
-            icon = accountKindIcon(AccountKind.fromCode(account.kindCode)),
+            icon = icon,
             size = 44.dp,
             iconSize = 24.dp,
         )
@@ -210,7 +212,7 @@ private fun PickerRow(
                     .padding(8.dp),
             ) {
                 TbIcon(
-                    icon = R.drawable.ic_tb_chevron_left,
+                    icon = R.drawable.ic_tb_chevron_right,
                     contentDescription = if (isExpanded) "بستن" else "باز کردن",
                     modifier = Modifier.rotate(if (isExpanded) 90f else 0f),
                     tint = scheme.onSurfaceVariant,
@@ -236,7 +238,7 @@ fun AmountKeypadSheet(initial: Long?, onDismiss: () -> Unit, onConfirm: (Long) -
     }
     fun digit(d: String) {
         val last = expr.lastOrNull()
-        if (d == "00" && (last == null || last in OPERATORS)) append("0") else append(d)
+        if (d == "000" && (last == null || last in OPERATORS)) append("0") else append(d)
     }
     fun operator(op: Char) {
         val last = expr.lastOrNull() ?: return
@@ -291,7 +293,7 @@ fun AmountKeypadSheet(initial: Long?, onDismiss: () -> Unit, onConfirm: (Long) -
                             listOf("7", "8", "9"),
                             listOf("4", "5", "6"),
                             listOf("1", "2", "3"),
-                            listOf("0", "00", "."),
+                            listOf("0", "000", "."),
                         ).forEach { keys ->
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 keys.forEach { k ->

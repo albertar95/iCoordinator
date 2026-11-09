@@ -1,5 +1,6 @@
 package com.icoordinator.ui.accounting
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -71,6 +72,8 @@ data class TxItem(
     val creditKind: AccountKind,
     val debitPath: String,
     val creditPath: String,
+    @DrawableRes val debitIcon: Int,
+    @DrawableRes val creditIcon: Int,
 )
 
 class TransactionListViewModel(private val repo: AccountingRepository) : ViewModel() {
@@ -94,6 +97,8 @@ class TransactionListViewModel(private val repo: AccountingRepository) : ViewMod
                     creditKind = ck,
                     debitPath = AccountingFormat.accountPath(t.debitAccountId, byId),
                     creditPath = AccountingFormat.accountPath(t.creditAccountId, byId),
+                    debitIcon = accountIcon(t.debitAccountId, byId),
+                    creditIcon = accountIcon(t.creditAccountId, byId),
                 )
             }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -335,9 +340,9 @@ private fun TxCard(
             .border(1.dp, scheme.outlineVariant, shape)
             .padding(16.dp),
     ) {
-        AccountLine(accountKindIcon(item.debitKind), debitLabel, item.debitPath)
+        AccountLine(item.debitIcon, debitLabel, item.debitPath)
         Spacer(Modifier.height(8.dp))
-        AccountLine(accountKindIcon(item.creditKind), creditLabel, item.creditPath)
+        AccountLine(item.creditIcon, creditLabel, item.creditPath)
         Spacer(Modifier.height(12.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(

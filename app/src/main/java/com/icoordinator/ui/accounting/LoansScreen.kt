@@ -235,6 +235,14 @@ private fun num(n: Int): String = AccountingFormat.digits(n.toString())
 private fun dayOf(date: String): Int? =
     AccountingMath.normalizeDate(date)?.split('/')?.getOrNull(2)?.toIntOrNull()
 
+private const val NO_DAY = 99
+
+/** Day of month of the loan's installment: next unpaid due date, else the first due date, else [NO_DAY]. */
+private fun installmentDay(row: LoanRow): Int {
+    val fromNext = row.next?.let { dayOf(it.dueDate) }
+    return fromNext ?: dayOf(row.loan.firstDueDate) ?: NO_DAY
+}
+
 @Composable
 fun LoansScreen() {
     val vm: LoansViewModel = viewModel(key = "acc_loans") {
@@ -305,16 +313,16 @@ fun LoansScreen() {
 private fun LoanList(state: LoansState, onAdd: () -> Unit, onOpen: (Long) -> Unit) {
     val entries = remember(state.rows) {
         val open = state.rows.filter { !it.loan.isClosed }
-        val closed = state.rows.filter { it.loan.isClosed }
-        val dated = open.filter { it.next != null }
-            .sortedWith(compareBy<LoanRow> { it.next?.dueEpochDay ?: Long.MAX_VALUE }.thenBy { it.loan.id })
-        val undated = open.filter { it.next == null }
+        val closed = state.rows.filter { it.loan.isClosed }.sortedWith(compareBy<LoanRow>({ it.loan.title }, { it.loan.id }))
+        val sortedOpen = open.sortedWith(
+            compareBy<LoanRow>({ installmentDay(it) }, { it.loan.title }, { it.loan.id }),
+        )
         buildList<LoanEntry> {
-            for ((due, group) in dated.groupBy { it.next?.dueDate ?: "" }) {
-                add(LoanEntry.DateHeader(due, AccountingFormat.dayHeader(due).ifEmpty { AccountingFormat.digits(due) }))
+            for ((day, group) in sortedOpen.groupBy { installmentDay(it) }) {
+                val title = if (day == NO_DAY) "بدون قسط باز" else "روز " + num(day) + " هر ماه"
+                add(LoanEntry.DateHeader(day.toString(), title))
                 group.forEach { add(LoanEntry.Card(it)) }
             }
-            undated.forEach { add(LoanEntry.Card(it)) }
             if (closed.isNotEmpty()) {
                 add(LoanEntry.ClosedLabel("closed"))
                 closed.forEach { add(LoanEntry.Card(it)) }

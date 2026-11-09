@@ -13,8 +13,8 @@ android {
         applicationId = "com.icoordinator"
         minSdk = 26
         targetSdk = 34
-        versionCode = 20200
-        versionName = "2.2.0"
+        versionCode = 20201
+        versionName = "2.2.1"
     }
 
     // ثابت: همه‌ی بیلدها (GitHub Actions و محلی) با یک کلید امضا می‌شوند تا آپدیت روی گوشی ممکن باشد

@@ -26,6 +26,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -45,9 +48,11 @@ import com.icoordinator.accounting.AccountingFormat
 import com.icoordinator.accounting.AccountingMath
 import com.icoordinator.accounting.AccountingRepository
 import com.icoordinator.accounting.CategoryTotal
+import com.icoordinator.accounting.InstallmentEntity
 import com.icoordinator.accounting.MonthTotals
 import com.icoordinator.accounting.MoneyFormat
 import com.icoordinator.accounting.ReportMath
+import com.icoordinator.accounting.TransactionEntity
 import com.icoordinator.accounting.TxType
 import com.icoordinator.domain.PersianCalendar
 import com.icoordinator.ui.components.PageHeader
@@ -94,7 +99,20 @@ data class ReportsState(
     val fundBalances: List<CategoryTotal> = emptyList(),
 )
 
+/** Raw data for the report tabs other than the summary. */
+data class ReportsData(
+    val loaded: Boolean = false,
+    val accounts: List<AccountEntity> = emptyList(),
+    val txs: List<TransactionEntity> = emptyList(),
+    val installments: List<InstallmentEntity> = emptyList(),
+)
+
 class ReportsViewModel(repo: AccountingRepository) : ViewModel() {
+
+    val data: StateFlow<ReportsData> =
+        combine(repo.observeAccounts(), repo.observeTransactions(), repo.observeInstallments()) { accounts, txs, installments ->
+            ReportsData(loaded = true, accounts = accounts, txs = txs, installments = installments)
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ReportsData())
 
     private val period = MutableStateFlow(
         AccountingFormat.currentMonth().let { ReportPeriod(MODE_MONTH, it.first, it.second) },
@@ -235,11 +253,22 @@ fun ReportsScreen() {
         ReportsViewModel(ICoordinatorApp.instance.accountingRepository)
     }
     val state by vm.state.collectAsStateWithLifecycle()
+    val data by vm.data.collectAsStateWithLifecycle()
+    var tab by rememberSaveable { mutableStateOf(0) }
     val scheme = MaterialTheme.colorScheme
 
     Column(modifier = Modifier.fillMaxSize().background(scheme.background)) {
         PageHeader(title = "گزارش‌ها")
-        if (state.loaded) {
+        ReportTabRow(selected = tab, onSelect = { tab = it })
+        if (state.loaded && data.loaded && tab != 0) {
+            when (tab) {
+                1 -> MonthlyReportTab(data)
+                2 -> AccountReportTab(data)
+                3 -> CompareReportTab(data)
+                else -> WealthReportTab(data)
+            }
+        }
+        if (state.loaded && tab == 0) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 24.dp),
@@ -296,6 +325,24 @@ fun ReportsScreen() {
     }
 }
 
+private val REPORT_TABS = listOf("خلاصه", "ماهانه", "حساب", "مقایسه", "دارایی و وام")
+
+/** Scrollable chip row that switches between the report tabs. */
+@Composable
+private fun ReportTabRow(selected: Int, onSelect: (Int) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        REPORT_TABS.forEachIndexed { index, title ->
+            PeriodChip(title, selected == index) { onSelect(index) }
+        }
+    }
+}
+
 @Composable
 private fun PeriodSelector(
     state: ReportsState,
@@ -347,7 +394,7 @@ private fun PeriodSelector(
 }
 
 @Composable
-private fun PeriodChip(title: String, selected: Boolean, onClick: () -> Unit) {
+internal fun PeriodChip(title: String, selected: Boolean, onClick: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     val shape = RoundedCornerShape(20.dp)
     Box(
@@ -370,7 +417,7 @@ private fun PeriodChip(title: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ReportSection(title: String, content: @Composable () -> Unit) {
+internal fun ReportSection(title: String, content: @Composable () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     val shape = RoundedCornerShape(24.dp)
     Column {
@@ -520,7 +567,7 @@ private fun SeriesChart(series: List<MonthTotals>) {
 }
 
 @Composable
-private fun LegendDot(color: Color, label: String) {
+internal fun LegendDot(color: Color, label: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(modifier = Modifier.size(12.dp).clip(CircleShape).background(color))
         Spacer(Modifier.width(6.dp))

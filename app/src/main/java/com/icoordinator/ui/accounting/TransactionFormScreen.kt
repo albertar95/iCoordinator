@@ -257,6 +257,6 @@ private fun FormRow(
                 color = scheme.onSurface,
             )
         }
-        TbIcon(R.drawable.ic_tb_chevron_left, null, tint = scheme.onSurfaceVariant)
+        TbIcon(R.drawable.ic_tb_chevron_right, null, tint = scheme.onSurfaceVariant)
     }
 }

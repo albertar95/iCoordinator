@@ -20,6 +20,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
@@ -157,6 +159,73 @@ internal fun HorizontalBars(items: List<BarItem>, modifier: Modifier = Modifier)
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Line chart: one dot per point joined by a polyline, oldest point first (at the start side of the layout direction),
+ * labels (one per point) under the axis, optional dashed [average] line. A zero line is drawn when the values cross zero.
+ */
+@Composable
+internal fun LineChart(points: List<Long>, labels: List<String>, modifier: Modifier = Modifier, average: Long? = null) {
+    val scheme = MaterialTheme.colorScheme
+    val lineColor = scheme.primary
+    val averageColor = scheme.outline
+    val axisColor = scheme.outlineVariant
+    Column(modifier = modifier) {
+        Canvas(modifier = Modifier.fillMaxWidth().height(140.dp)) {
+            val rtl = layoutDirection == LayoutDirection.Rtl
+            val pad = 8.dp.toPx()
+            val top = pad
+            val bottom = size.height - pad
+            val all = if (average != null) points + average else points
+            val lo = minOf(0L, all.minOrNull() ?: 0L)
+            val hi = maxOf(0L, all.maxOrNull() ?: 0L)
+            val span = (hi - lo).toDouble()
+            fun yOf(v: Long): Float =
+                if (span <= 0.0) bottom else (bottom - (v - lo).toDouble() / span * (bottom - top)).toFloat()
+            val count = points.size
+            val slot = if (count > 0) size.width / count else size.width
+            fun xOf(index: Int): Float {
+                val x = slot * (index + 0.5f)
+                return if (rtl) size.width - x else x
+            }
+            drawLine(color = axisColor, start = Offset(0f, yOf(0L)), end = Offset(size.width, yOf(0L)), strokeWidth = 2f)
+            if (average != null) {
+                drawLine(
+                    color = averageColor,
+                    start = Offset(0f, yOf(average)),
+                    end = Offset(size.width, yOf(average)),
+                    strokeWidth = 3f,
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 10f)),
+                )
+            }
+            for (i in 1 until count) {
+                drawLine(
+                    color = lineColor,
+                    start = Offset(xOf(i - 1), yOf(points[i - 1])),
+                    end = Offset(xOf(i), yOf(points[i])),
+                    strokeWidth = 5f,
+                    cap = StrokeCap.Round,
+                )
+            }
+            for (i in 0 until count) {
+                drawCircle(color = lineColor, radius = 5.dp.toPx(), center = Offset(xOf(i), yOf(points[i])))
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Row(modifier = Modifier.fillMaxWidth()) {
+            labels.forEach { label ->
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = scheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f),
+                )
             }
         }
     }
