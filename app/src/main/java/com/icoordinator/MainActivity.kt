@@ -35,7 +35,10 @@ import com.icoordinator.settings.ThemeMode
 import com.icoordinator.ui.RootNavHost
 import com.icoordinator.ui.lock.LockScreen
 import com.icoordinator.ui.theme.ICoordinatorTheme
+import com.icoordinator.vault.SecureScreen
+import com.icoordinator.vault.VaultSession
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 class MainActivity : FragmentActivity() {
@@ -55,7 +58,7 @@ class MainActivity : FragmentActivity() {
         // اگر اسکرین‌شات مجاز نباشد، محتوا در اسکرین‌شات و لیست برنامه‌های اخیر دیده نمی‌شود
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                AppSettings.allowScreenshots.collect { allow ->
+                combine(AppSettings.allowScreenshots, SecureScreen.forced) { allow, forced -> allow && !forced }.collect { allow ->
                     if (allow) {
                         window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
                     } else {
@@ -138,6 +141,8 @@ class MainActivity : FragmentActivity() {
         super.onStop()
         if (!isChangingConfigurations) {
             LockState.backgroundAt = SystemClock.elapsedRealtime()
+            // a system picker opened from the vault (backup) must not lock it (R1-01)
+            if (!LockState.skipNextLock) VaultSession.lock()
         }
     }
 }

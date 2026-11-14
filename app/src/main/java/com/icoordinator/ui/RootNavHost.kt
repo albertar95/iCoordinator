@@ -24,6 +24,7 @@ import com.icoordinator.accounting.AccountingFormat
 import com.icoordinator.accounting.AccountingMath
 import com.icoordinator.accounting.LoanPlanner
 import com.icoordinator.accounting.MoneyFormat
+import com.icoordinator.personal.RecordMath
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -62,12 +63,18 @@ import androidx.navigation.compose.rememberNavController
 import com.icoordinator.R
 import com.icoordinator.ui.accounting.AccountingNavHost
 import com.icoordinator.ui.components.TbIcon
+import com.icoordinator.ui.notes.NotesNavHost
+import com.icoordinator.ui.records.RecordsScreen
+import com.icoordinator.ui.vault.VaultNavHost
 
 /** Root routes: the home menu and the two areas of the app. */
 object RootRoutes {
     const val HOME = "home"
     const val TASKS = "tasks"
     const val ACCOUNTING = "accounting"
+    const val NOTES = "notes"
+    const val RECORDS = "records"
+    const val VAULT = "vault"
 }
 
 /** App entry: home menu with two rows; each area has its own inner NavHost and Back returns to home. */
@@ -83,11 +90,29 @@ fun RootNavHost() {
                 onOpenAccounting = {
                     navController.navigate(RootRoutes.ACCOUNTING) { launchSingleTop = true }
                 },
+                onOpenNotes = {
+                    navController.navigate(RootRoutes.NOTES) { launchSingleTop = true }
+                },
+                onOpenRecords = {
+                    navController.navigate(RootRoutes.RECORDS) { launchSingleTop = true }
+                },
+                onOpenVault = {
+                    navController.navigate(RootRoutes.VAULT) { launchSingleTop = true }
+                },
             )
         }
         composable(RootRoutes.TASKS) { AppNavHost() }
         composable(RootRoutes.ACCOUNTING) {
             AccountingNavHost(onExit = { navController.popBackStack() })
+        }
+        composable(RootRoutes.NOTES) {
+            NotesNavHost(onExit = { navController.popBackStack() })
+        }
+        composable(RootRoutes.RECORDS) {
+            RecordsScreen(onExit = { navController.popBackStack() })
+        }
+        composable(RootRoutes.VAULT) {
+            VaultNavHost(onExit = { navController.popBackStack() })
         }
     }
 }
@@ -97,6 +122,8 @@ data class HomeSummary(
     val tasksLine: String? = null,
     val spendLine: String? = null,
     val installmentLine: String? = null,
+    val notesLine: String? = null,
+    val recordsLine: String? = null,
 )
 
 class HomeViewModel : ViewModel() {
@@ -136,9 +163,24 @@ class HomeViewModel : ViewModel() {
         }
     }
 
+    private val notesLine: kotlinx.coroutines.flow.Flow<String?> =
+        app.personalRepository.observeNotes().map { notes ->
+            if (notes.isEmpty()) "یادداشتی نیست" else AccountingFormat.digits("${notes.size} یادداشت")
+        }
+
+    private val recordsLine: kotlinx.coroutines.flow.Flow<String?> =
+        app.personalRepository.observeRecords().map { records ->
+            if (records.isEmpty()) {
+                "رکوردی نیست"
+            } else {
+                val average = records.sumOf { RecordMath.percent(it.current, it.target) } / records.size
+                AccountingFormat.digits("${records.size} رکورد، میانگین ${average}٪")
+            }
+        }
+
     val summary: StateFlow<HomeSummary> = combine(
-        tasksLine.catchNull(), accountingLines.catchPair(),
-    ) { t, a -> HomeSummary(t, a.first, a.second) }
+        tasksLine.catchNull(), accountingLines.catchPair(), notesLine.catchNull(), recordsLine.catchNull(),
+    ) { t, a, n, r -> HomeSummary(t, a.first, a.second, notesLine = n, recordsLine = r) }
         .catch { e -> if (e is CancellationException) throw e else emit(HomeSummary()) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeSummary())
 }
@@ -156,7 +198,13 @@ private fun greeting(hour: Int): String = when {
 }
 
 @Composable
-private fun HomeMenu(onOpenTasks: () -> Unit, onOpenAccounting: () -> Unit) {
+private fun HomeMenu(
+    onOpenTasks: () -> Unit,
+    onOpenAccounting: () -> Unit,
+    onOpenNotes: () -> Unit,
+    onOpenRecords: () -> Unit,
+    onOpenVault: () -> Unit,
+) {
     val vm: HomeViewModel = viewModel(key = "home")
     val summary by vm.summary.collectAsStateWithLifecycle()
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
@@ -184,6 +232,27 @@ private fun HomeMenu(onOpenTasks: () -> Unit, onOpenAccounting: () -> Unit) {
             lines = listOfNotNull(summary.spendLine, summary.installmentLine),
             colors = if (dark) listOf(Color(0xFF047857), Color(0xFF0F766E)) else listOf(Color(0xFF10B981), Color(0xFF0D9488)),
             onClick = onOpenAccounting,
+        )
+        HomeCard(
+            icon = R.drawable.ic_tb_notes,
+            title = "یادداشت‌ها",
+            lines = listOfNotNull(summary.notesLine),
+            colors = if (dark) listOf(Color(0xFFB45309), Color(0xFFC2410C)) else listOf(Color(0xFFF59E0B), Color(0xFFF97316)),
+            onClick = onOpenNotes,
+        )
+        HomeCard(
+            icon = R.drawable.ic_tb_target,
+            title = "رکوردها",
+            lines = listOfNotNull(summary.recordsLine),
+            colors = if (dark) listOf(Color(0xFF0369A1), Color(0xFF1D4ED8)) else listOf(Color(0xFF0EA5E9), Color(0xFF2563EB)),
+            onClick = onOpenRecords,
+        )
+        HomeCard(
+            icon = R.drawable.ic_tb_shield_lock,
+            title = "مدیریت رمزها",
+            lines = listOf("با رمز برنامه قفل است"),
+            colors = if (dark) listOf(Color(0xFF475569), Color(0xFF1E293B)) else listOf(Color(0xFF64748B), Color(0xFF334155)),
+            onClick = onOpenVault,
         )
     }
 }
