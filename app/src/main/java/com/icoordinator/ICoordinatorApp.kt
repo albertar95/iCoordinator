@@ -13,6 +13,13 @@ import com.icoordinator.data.ProjectRepository
 import com.icoordinator.data.ReportRepository
 import com.icoordinator.data.RoutineRepository
 import com.icoordinator.data.TaskRepository
+import com.icoordinator.personal.FileNoteImageStore
+import com.icoordinator.personal.NoteImageFiles
+import com.icoordinator.personal.PersonalDatabase
+import com.icoordinator.personal.PersonalRepository
+import com.icoordinator.vault.VaultDatabase
+import com.icoordinator.vault.VaultKeyStore
+import com.icoordinator.vault.VaultRepository
 
 class ICoordinatorApp : Application() {
 
@@ -57,6 +64,22 @@ class ICoordinatorApp : Application() {
 
     val accountingRepository: AccountingRepository by lazy {
         AccountingRepository(accountingDatabase)
+    }
+
+    val personalDatabase: PersonalDatabase by lazy {
+        Room.databaseBuilder(this, PersonalDatabase::class.java, PersonalDatabase.DB_NAME).build()
+    }
+
+    val personalRepository: PersonalRepository by lazy {
+        PersonalRepository(personalDatabase, FileNoteImageStore(NoteImageFiles.dir(this)))
+    }
+
+    val vaultDatabase: VaultDatabase by lazy {
+        Room.databaseBuilder(this, VaultDatabase::class.java, VaultDatabase.DB_NAME).build()
+    }
+
+    val vaultRepository: VaultRepository by lazy {
+        VaultRepository(vaultDatabase, VaultKeyStore.cipher())
     }
 
     companion object {
