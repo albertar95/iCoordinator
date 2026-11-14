@@ -33,7 +33,10 @@ import com.icoordinator.vault.VaultSession
 /** Routes of the vault section. Only ids travel in routes (-1 = none), never vault data. */
 object VaultRoutes {
     const val LIST = "vault_list"
+    const val FOLDER = "vault_folder/{folderId}"
     const val ENTRY = "vault_entry/{id}?folder={folder}"
+
+    fun folder(folderId: Long): String = "vault_folder/$folderId"
 
     fun entry(id: Long?, folderId: Long?): String = "vault_entry/${id ?: -1L}?folder=${folderId ?: -1L}"
 }
@@ -90,6 +93,28 @@ private fun VaultUnlockedHost(vm: VaultViewModel, onExit: () -> Unit) {
                 onExit = onExit,
                 onOpenEntry = { id, folderId ->
                     navController.navigate(VaultRoutes.entry(id, folderId)) { launchSingleTop = true }
+                },
+                onOpenFolder = { folderId ->
+                    navController.navigate(VaultRoutes.folder(folderId)) { launchSingleTop = true }
+                },
+            )
+        }
+        composable(
+            route = VaultRoutes.FOLDER,
+            arguments = listOf(navArgument("folderId") { type = NavType.LongType }),
+        ) { backStackEntry ->
+            val folderId = backStackEntry.arguments?.getLong("folderId") ?: -1L
+            VaultFolderScreen(
+                vm = vm,
+                folderId = folderId,
+                // guarded: asked twice after a delete (button and "folder is gone")
+                onBack = {
+                    if (navController.currentBackStackEntry?.destination?.route == VaultRoutes.FOLDER) {
+                        navController.popBackStack()
+                    }
+                },
+                onOpenEntry = { id, fid ->
+                    navController.navigate(VaultRoutes.entry(id, fid)) { launchSingleTop = true }
                 },
             )
         }

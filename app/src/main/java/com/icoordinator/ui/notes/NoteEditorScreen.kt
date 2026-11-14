@@ -78,7 +78,9 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.lifecycle.Lifecycle
@@ -90,6 +92,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.icoordinator.R
 import com.icoordinator.accounting.AccountingFormat
+import com.icoordinator.personal.BlockAlign
 import com.icoordinator.personal.BlockType
 import com.icoordinator.personal.NoteBlock
 import com.icoordinator.personal.NoteBlocks
@@ -143,6 +146,14 @@ private fun styledText(block: NoteBlock): AnnotatedString = buildAnnotatedString
         }
         if (style != null) addStyle(style, s, e)
     }
+}
+
+/** AUTO follows the text (start side, default direction); RIGHT / LEFT also pick the matching direction for neutral text. */
+private fun alignedStyle(style: TextStyle, align: BlockAlign): TextStyle = when (align) {
+    BlockAlign.AUTO -> style.copy(textAlign = TextAlign.Start)
+    BlockAlign.RIGHT -> style.copy(textAlign = TextAlign.Right, textDirection = TextDirection.ContentOrRtl)
+    BlockAlign.LEFT -> style.copy(textAlign = TextAlign.Left, textDirection = TextDirection.ContentOrLtr)
+    BlockAlign.CENTER -> style.copy(textAlign = TextAlign.Center)
 }
 
 @Composable
@@ -245,6 +256,12 @@ private fun ColumnScope.EditorBody(vm: NoteEditorViewModel, state: EditorState) 
         },
     )
 
+    HorizontalDivider(
+        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+        thickness = 1.dp,
+        color = MaterialTheme.colorScheme.outlineVariant,
+    )
+
     LazyColumn(
         state = listState,
         modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -344,7 +361,7 @@ private fun TextBlock(block: NoteBlock, number: Int, state: EditorState, vm: Not
                 tfv = new
                 vm.onBlockValueChange(block.id, new.text, new.selection.start, new.selection.end)
             },
-            textStyle = baseStyle,
+            textStyle = alignedStyle(baseStyle, block.align),
             cursorBrush = SolidColor(scheme.primary),
             modifier = Modifier
                 .weight(1f)
@@ -418,7 +435,9 @@ private fun ImageBlock(block: NoteBlock, onLongPress: () -> Unit) {
 @Composable
 private fun EditorToolbar(state: EditorState, vm: NoteEditorViewModel, onPickImage: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
-    val focusedType = state.blocks.firstOrNull { it.id == state.focusedBlockId }?.type
+    val focusedBlock = state.blocks.firstOrNull { it.id == state.focusedBlockId }
+    val focusedType = focusedBlock?.type
+    val focusedAlign = focusedBlock?.takeIf { it.type != BlockType.IMAGE }?.align ?: BlockAlign.AUTO
     var highlightMenu by remember { mutableStateOf(false) }
     var colorMenu by remember { mutableStateOf(false) }
     var sizeMenu by remember { mutableStateOf(false) }
@@ -530,6 +549,15 @@ private fun EditorToolbar(state: EditorState, vm: NoteEditorViewModel, onPickIma
             }
             ToolbarButton(R.drawable.ic_tb_square_check, "فهرست کارها", focusedType == BlockType.CHECK) {
                 vm.toggleBlockType(BlockType.CHECK)
+            }
+            ToolbarButton(R.drawable.ic_tb_align_right, "راست‌چین", focusedAlign == BlockAlign.RIGHT) {
+                vm.toggleAlign(BlockAlign.RIGHT)
+            }
+            ToolbarButton(R.drawable.ic_tb_align_center, "وسط‌چین", focusedAlign == BlockAlign.CENTER) {
+                vm.toggleAlign(BlockAlign.CENTER)
+            }
+            ToolbarButton(R.drawable.ic_tb_align_left, "چپ‌چین", focusedAlign == BlockAlign.LEFT) {
+                vm.toggleAlign(BlockAlign.LEFT)
             }
             ToolbarButton(R.drawable.ic_tb_photo, "افزودن عکس", false, onPickImage)
         }

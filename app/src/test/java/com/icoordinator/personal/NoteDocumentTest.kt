@@ -254,4 +254,44 @@ class NoteDocumentTest {
     @Test fun decodeValidIdsAreKept() {
         assertEquals(listOf(5L, 2L, 9L), ids("""{"v":1,"blocks":[{"id":5},{"id":2},{"id":9}]}"""))
     }
+
+    @Test fun alignRoundTrip() = roundTrip(
+        NoteDocument(
+            listOf(
+                NoteBlock(1, BlockType.PARAGRAPH, "a", align = BlockAlign.RIGHT),
+                NoteBlock(2, BlockType.HEADING, "b", align = BlockAlign.LEFT),
+                NoteBlock(3, BlockType.BULLET, "c", align = BlockAlign.CENTER),
+                NoteBlock(4, BlockType.PARAGRAPH, "d"),
+            )
+        )
+    )
+
+    @Test fun oldJsonWithoutAlignDecodesToAuto() {
+        val doc = NoteCodec.decode("""{"v":1,"blocks":[{"id":1,"t":"p","x":"hi","s":[],"c":false,"img":null}]}""")
+        assertEquals(BlockAlign.AUTO, doc.blocks[0].align)
+        assertEquals(BlockAlign.AUTO, NoteCodec.decode("""{"v":1,"blocks":[{"id":1,"a":"zzz"}]}""").blocks[0].align)
+        assertEquals(BlockAlign.AUTO, BlockAlign.fromCode(null))
+    }
+
+    @Test fun autoIsNotWritten() {
+        val json = NoteCodec.encode(NoteDocument(listOf(NoteBlock(1, BlockType.PARAGRAPH, "x"))))
+        assertFalse(json.contains("\"a\""))
+        val json2 = NoteCodec.encode(NoteDocument(listOf(NoteBlock(1, BlockType.PARAGRAPH, "x", align = BlockAlign.RIGHT))))
+        assertTrue(json2.contains("\"a\":\"r\""))
+    }
+
+    @Test fun splitInheritsAlign() {
+        val (first, second) = NoteBlocks.split(NoteBlock(1, BlockType.HEADING, "abcd", align = BlockAlign.CENTER), 2, 2)
+        assertEquals(BlockAlign.CENTER, first.align)
+        assertEquals(BlockAlign.CENTER, second.align)
+    }
+
+    @Test fun mergeKeepsPreviousAlign() {
+        val merged = NoteBlocks.mergeIntoPrevious(
+            NoteBlock(1, BlockType.PARAGRAPH, "ab", align = BlockAlign.LEFT),
+            NoteBlock(2, BlockType.PARAGRAPH, "cd", align = BlockAlign.RIGHT),
+        )
+        assertEquals("abcd", merged.text)
+        assertEquals(BlockAlign.LEFT, merged.align)
+    }
 }

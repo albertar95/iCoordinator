@@ -3,6 +3,7 @@ package com.icoordinator.ui.notes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.icoordinator.ICoordinatorApp
+import com.icoordinator.personal.BlockAlign
 import com.icoordinator.personal.BlockType
 import com.icoordinator.personal.NoteBlock
 import com.icoordinator.personal.NoteBlocks
@@ -383,6 +384,17 @@ class NoteEditorViewModel(noteId: Long?, private val initialFolderId: Long?) : V
         val target = if (block.type == type) BlockType.PARAGRAPH else type
         replaceBlock(id) { it.copy(type = target, checked = false) }
         changed()
+    }
+
+    /** Right / centre / left button: the same alignment again goes back to AUTO. No-op for images or without a focused block. */
+    fun toggleAlign(align: BlockAlign) {
+        val id = _state.value.focusedBlockId ?: return
+        val block = _state.value.blocks.firstOrNull { it.id == id } ?: return
+        if (block.type == BlockType.IMAGE) return
+        val target = if (block.align == align) BlockAlign.AUTO else align
+        replaceBlock(id) { it.copy(align = target) }
+        changed()
+        restoreFocus()
     }
 
     fun setChecked(blockId: Long, checked: Boolean) {

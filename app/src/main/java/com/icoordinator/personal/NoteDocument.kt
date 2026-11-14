@@ -16,6 +16,15 @@ enum class SpanKind(val code: String) {
     }
 }
 
+/** Per-block text alignment. AUTO = follow the text direction (code is empty and never written). */
+enum class BlockAlign(val code: String) {
+    AUTO(""), RIGHT("r"), LEFT("l"), CENTER("c");
+
+    companion object {
+        fun fromCode(code: String?): BlockAlign = values().firstOrNull { it.code == code && it != AUTO } ?: AUTO
+    }
+}
+
 /** [start, end) character range of NoteBlock.text. value: palette index for HIGHLIGHT (0..3) and COLOR (0..5); size step for SIZE (-1 small, 1 large, 2 huge); 0 for the others. */
 data class TextSpan(val start: Int, val end: Int, val kind: SpanKind, val value: Int = 0)
 
@@ -27,6 +36,7 @@ data class NoteBlock(
     val spans: List<TextSpan> = emptyList(),
     val checked: Boolean = false,
     val imageName: String? = null,
+    val align: BlockAlign = BlockAlign.AUTO,
 )
 
 data class NoteDocument(val blocks: List<NoteBlock>) {
@@ -53,6 +63,7 @@ object NoteCodec {
             sb.append("],\"c\":").append(if (b.checked) "true" else "false")
             sb.append(",\"img\":")
             if (b.imageName == null) sb.append("null") else writeString(sb, b.imageName)
+            if (b.align != BlockAlign.AUTO) { sb.append(",\"a\":"); writeString(sb, b.align.code) }
             sb.append('}')
         }
         sb.append("]}")
@@ -128,7 +139,8 @@ object NoteCodec {
                 }
                 val checked = m["c"] as? Boolean ?: false
                 val img = m["img"] as? String
-                blocks.add(NoteBlock(id, type, x, SpanOps.normalize(spans, x.length), checked, img))
+                val align = BlockAlign.fromCode(m["a"] as? String)
+                blocks.add(NoteBlock(id, type, x, SpanOps.normalize(spans, x.length), checked, img, align))
             }
             if (blocks.isEmpty()) return NoteDocument.empty()
             return NoteDocument(blocks)
@@ -365,6 +377,7 @@ object NoteBlocks {
             spans = SpanOps.normalize(secondSpans, secondText.length),
             checked = false,
             imageName = null,
+            align = block.align,
         )
         return first to second
     }

@@ -1,10 +1,10 @@
-# Handover - iCoordinator phase 4 (home menu + personal accounting)
+# Handover - iCoordinator phase 4 (home menu + personal accounting) + rounds 3-4 (notes, records, vault)
 Prompt version: Orchestrator v6.8 - Last updated: 2026-11-09 13:30 - Mode: Auto - Path: Full
 
 ## In one minute
-Last time: All 3 sprints + independent review + fixes done and committed (version 2.2.0). Home menu, accounting (dashboard, transactions, loans with reminders, reports, accounts, Parmis import, accounting backup/restore).
-Now: sprint 4 (user feedback items 1-6) committed as 2.2.1; waiting for CI and the user's test.
-Next: if CI fails, read the error log and fix (Compose code was never compiled; pure code: 83 tests pass locally). Then user acceptance: import .par, check D52 numbers.
+Last time: rounds 3+4 done - Notes, Record tracker, Password manager, folder tiles, alignment; v2.4.1 installed and confirmed by the user (2026-11-14 22:18).
+Now: code is on GitHub branch round3 (CI green), main not merged yet.
+Next: merge round3 into main when the user agrees; then the user runs git checkout main + git pull locally (not push.bat first). New user changes: list them one by one, apply only when the user says so.
 
 ## Goal
 See ledger-phase4.md (R1-R8).
