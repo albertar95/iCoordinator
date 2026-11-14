@@ -9,6 +9,7 @@ import com.icoordinator.personal.NoteEntity
 import com.icoordinator.personal.NoteFolderEntity
 import com.icoordinator.personal.NoteText
 import com.icoordinator.personal.PersonalRepository
+import com.icoordinator.ui.components.FolderTileData
 import java.time.Instant
 import java.time.ZoneId
 import kotlinx.coroutines.Dispatchers
@@ -31,52 +32,76 @@ data class NoteListItem(
     val pinned: Boolean,
 )
 
+/**
+ * Everything both notes pages need. Main page: [folderTiles] + unfiled notes ([pinned], [others]); while [query] is
+ * not blank [pinned]/[others] hold the matches from ALL folders and the tiles are hidden by the screen.
+ * Folder page: [folderPageFor] is the folder id the folder fields belong to; [folderName] is null when it does not exist.
+ */
 data class NotesState(
     val loaded: Boolean = false,
     val folders: List<NoteFolderEntity> = emptyList(),
-    /** null = "همه". */
-    val selectedFolderId: Long? = null,
+    val folderTiles: List<FolderTileData> = emptyList(),
     val query: String = "",
     val pinned: List<NoteListItem> = emptyList(),
     val others: List<NoteListItem> = emptyList(),
+    val folderPageFor: Long? = null,
+    val folderName: String? = null,
+    val folderQuery: String = "",
+    val folderPinned: List<NoteListItem> = emptyList(),
+    val folderOthers: List<NoteListItem> = emptyList(),
 )
 
 class NotesViewModel : ViewModel() {
 
     private val repo: PersonalRepository get() = ICoordinatorApp.instance.personalRepository
 
-    private val selectedFolder = MutableStateFlow<Long?>(null)
     private val query = MutableStateFlow("")
+    private val openFolderId = MutableStateFlow<Long?>(null)
+    private val folderQuery = MutableStateFlow("")
 
     val state: StateFlow<NotesState> = combine(
         repo.observeFolders(),
         repo.observeNotes(),
-        selectedFolder,
         query,
-    ) { folders, notes, selected, q ->
-        // a folder that no longer exists falls back to "همه"
-        val effective = if (selected != null && folders.none { it.id == selected }) null else selected
+        openFolderId,
+        folderQuery,
+    ) { folders, notes, q, openId, fq ->
         val names = folders.associate { it.id to it.name }
-        val items = notes
-            .filter { effective == null || it.folderId == effective }
-            .filter { NoteText.matches(it.title, it.plainText, q) }
-            .map { toItem(it, if (effective == null) names[it.folderId ?: -1L] else null) }
+        val counts = notes.groupingBy { it.folderId }.eachCount()
+        val tiles = folders.map { FolderTileData(it.id, it.name, counts[it.id] ?: 0) }
+        // notes arrive pinned first; blank query = notes without a folder, otherwise matches from every folder
+        val main = (if (q.isBlank()) notes.filter { it.folderId == null } else notes.filter { NoteText.matches(it.title, it.plainText, q) })
+            .map { toItem(it, if (q.isBlank()) null else names[it.folderId ?: -1L]) }
+        val inFolder = if (openId == null) emptyList() else notes
+            .filter { it.folderId == openId && NoteText.matches(it.title, it.plainText, fq) }
+            .map { toItem(it, null) }
         NotesState(
             loaded = true,
             folders = folders,
-            selectedFolderId = effective,
+            folderTiles = tiles,
             query = q,
-            pinned = items.filter { it.pinned },
-            others = items.filter { !it.pinned },
+            pinned = main.filter { it.pinned },
+            others = main.filter { !it.pinned },
+            folderPageFor = openId,
+            folderName = openId?.let { names[it] },
+            folderQuery = fq,
+            folderPinned = inFolder.filter { it.pinned },
+            folderOthers = inFolder.filter { !it.pinned },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), NotesState())
 
-    fun selectFolder(id: Long?) {
-        selectedFolder.value = id
-    }
-
     fun setQuery(text: String) {
         query.value = text
+    }
+
+    /** Called when the folder page opens: selects the folder and clears the folder search. */
+    fun openFolder(id: Long) {
+        folderQuery.value = ""
+        openFolderId.value = id
+    }
+
+    fun setFolderQuery(text: String) {
+        folderQuery.value = text
     }
 
     fun setPinned(id: Long, pinned: Boolean, onResult: (String?) -> Unit = {}) =
@@ -91,8 +116,7 @@ class NotesViewModel : ViewModel() {
     fun addFolder(name: String, onResult: (String?) -> Unit) {
         viewModelScope.launch {
             val error = try {
-                val newId = withContext(Dispatchers.IO) { repo.addFolder(name) }
-                selectedFolder.value = newId
+                withContext(Dispatchers.IO) { repo.addFolder(name) }
                 null
             } catch (e: IllegalArgumentException) {
                 "نام پوشه را وارد کن"
@@ -125,7 +149,6 @@ class NotesViewModel : ViewModel() {
         viewModelScope.launch {
             val error = try {
                 withContext(Dispatchers.IO) { repo.deleteFolder(id) }
-                if (selectedFolder.value == id) selectedFolder.value = null
                 null
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e

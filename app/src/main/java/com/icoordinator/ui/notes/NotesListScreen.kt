@@ -20,14 +20,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -40,6 +37,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,7 +50,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.icoordinator.ICoordinatorApp
 import com.icoordinator.R
 import com.icoordinator.data.BackupManager
@@ -62,6 +59,7 @@ import com.icoordinator.security.LockState
 import com.icoordinator.ui.components.AppTextField
 import com.icoordinator.ui.components.ConfirmDeleteDialog
 import com.icoordinator.ui.components.EmptyState
+import com.icoordinator.ui.components.FolderGrid
 import com.icoordinator.ui.components.PageHeader
 import com.icoordinator.ui.components.PillButton
 import com.icoordinator.ui.components.SectionLabel
@@ -74,10 +72,11 @@ import kotlinx.coroutines.withContext
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun NotesListScreen(
+    vm: NotesViewModel,
     onExit: () -> Unit,
     onOpenNote: (noteId: Long?, folderId: Long?) -> Unit,
+    onOpenFolder: (folderId: Long) -> Unit,
 ) {
-    val vm: NotesViewModel = viewModel(key = "notes_list")
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val activity = remember(context) { findActivity(context) }
@@ -95,8 +94,6 @@ internal fun NotesListScreen(
     var folderMenu by remember { mutableStateOf<NoteFolderEntity?>(null) }
     var folderToDelete by remember { mutableStateOf<NoteFolderEntity?>(null) }
     var noteMenu by remember { mutableStateOf<NoteListItem?>(null) }
-    var noteToMove by remember { mutableStateOf<NoteListItem?>(null) }
-    var noteToDelete by remember { mutableStateOf<NoteListItem?>(null) }
 
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/zip"),
@@ -180,68 +177,54 @@ internal fun NotesListScreen(
                 label = "جستجو در یادداشت‌ها",
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
             )
-            Spacer(Modifier.height(12.dp))
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 20.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                item(key = "chip_all") {
-                    FolderChip(
-                        text = "همه",
-                        selected = state.selectedFolderId == null,
-                        onClick = { vm.selectFolder(null) },
-                    )
-                }
-                items(state.folders, key = { "chip_" + it.id }) { folder ->
-                    FolderChip(
-                        text = folder.name,
-                        selected = state.selectedFolderId == folder.id,
-                        onClick = { vm.selectFolder(folder.id) },
-                        onLongClick = { folderMenu = folder },
-                    )
-                }
-                item(key = "chip_add") {
-                    FolderChip(
-                        text = null,
-                        selected = false,
-                        onClick = { showNewFolder = true },
-                    )
-                }
-            }
             Spacer(Modifier.height(8.dp))
-            when {
-                !state.loaded -> Unit
-                state.pinned.isEmpty() && state.others.isEmpty() -> EmptyState(
-                    icon = R.drawable.ic_tb_notes,
-                    title = if (searching) "چیزی پیدا نشد" else "یادداشتی نیست",
-                    message = if (searching) "عبارت دیگری را امتحان کن" else "با دکمه‌ی یادداشت جدید شروع کن",
-                    modifier = Modifier.weight(1f),
-                )
-                else -> {
-                    val showLabels = state.pinned.isNotEmpty() && state.others.isNotEmpty()
-                    LazyColumn(
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 104.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        if (showLabels) {
+            if (state.loaded) {
+                val unfiledEmpty = state.pinned.isEmpty() && state.others.isEmpty()
+                LazyColumn(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 104.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    if (!searching) {
+                        item(key = "label_folders") { SectionLabel("پوشه‌ها") }
+                        item(key = "folder_grid") {
+                            FolderGrid(
+                                folders = state.folderTiles,
+                                onOpen = onOpenFolder,
+                                onLongPress = { id -> folderMenu = state.folders.firstOrNull { it.id == id } },
+                                onAdd = { showNewFolder = true },
+                            )
+                        }
+                    }
+                    if (unfiledEmpty) {
+                        if (searching || state.folderTiles.isEmpty()) {
+                            item(key = "empty") {
+                                EmptyState(
+                                    icon = R.drawable.ic_tb_notes,
+                                    title = if (searching) "چیزی پیدا نشد" else "یادداشتی نیست",
+                                    message = if (searching) "عبارت دیگری را امتحان کن" else "با دکمه‌ی یادداشت جدید شروع کن",
+                                )
+                            }
+                        }
+                    } else {
+                        if (!searching && state.pinned.isNotEmpty()) {
                             item(key = "label_pinned") { SectionLabel("سنجاق‌شده") }
                         }
                         items(state.pinned, key = { "n_" + it.id }) { item ->
                             NoteCard(
                                 item = item,
-                                showFolder = state.selectedFolderId == null,
+                                showFolder = searching,
                                 onClick = { onOpenNote(item.id, item.folderId) },
                                 onLongClick = { noteMenu = item },
                             )
                         }
-                        if (showLabels) {
+                        if (!searching && state.others.isNotEmpty()) {
                             item(key = "label_others") { SectionLabel("یادداشت‌ها") }
                         }
                         items(state.others, key = { "n_" + it.id }) { item ->
                             NoteCard(
                                 item = item,
-                                showFolder = state.selectedFolderId == null,
+                                showFolder = searching,
                                 onClick = { onOpenNote(item.id, item.folderId) },
                                 onLongClick = { noteMenu = item },
                             )
@@ -252,7 +235,7 @@ internal fun NotesListScreen(
         }
         PillButton(
             text = "یادداشت جدید",
-            onClick = { onOpenNote(null, state.selectedFolderId) },
+            onClick = { onOpenNote(null, null) },
             icon = R.drawable.ic_tb_plus,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
@@ -314,67 +297,13 @@ internal fun NotesListScreen(
         )
     }
 
-    val actionNote = noteMenu
-    if (actionNote != null) {
-        AlertDialog(
-            onDismissRequest = { noteMenu = null },
-            title = { Text(actionNote.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-            text = {
-                Column {
-                    ActionRow(if (actionNote.pinned) "برداشتن سنجاق" else "سنجاق کردن") {
-                        noteMenu = null
-                        vm.setPinned(actionNote.id, !actionNote.pinned, showError)
-                    }
-                    ActionRow("انتقال به پوشه") {
-                        noteMenu = null
-                        noteToMove = actionNote
-                    }
-                    ActionRow("حذف", MaterialTheme.colorScheme.error) {
-                        noteMenu = null
-                        noteToDelete = actionNote
-                    }
-                }
-            },
-            confirmButton = {},
-            dismissButton = { TextButton(onClick = { noteMenu = null }) { Text("انصراف") } },
-        )
-    }
-
-    val movingNote = noteToMove
-    if (movingNote != null) {
-        AlertDialog(
-            onDismissRequest = { noteToMove = null },
-            title = { Text("انتقال به پوشه") },
-            text = {
-                Column {
-                    ActionRow("بدون پوشه", selected = movingNote.folderId == null) {
-                        noteToMove = null
-                        vm.moveNote(movingNote.id, null, showError)
-                    }
-                    state.folders.forEach { folder ->
-                        ActionRow(folder.name, selected = movingNote.folderId == folder.id) {
-                            noteToMove = null
-                            vm.moveNote(movingNote.id, folder.id, showError)
-                        }
-                    }
-                }
-            },
-            confirmButton = {},
-            dismissButton = { TextButton(onClick = { noteToMove = null }) { Text("انصراف") } },
-        )
-    }
-
-    val deletingNote = noteToDelete
-    if (deletingNote != null) {
-        ConfirmDeleteDialog(
-            itemName = deletingNote.title,
-            onConfirm = {
-                noteToDelete = null
-                vm.deleteNote(deletingNote.id, showError)
-            },
-            onDismiss = { noteToDelete = null },
-        )
-    }
+    NoteActions(
+        vm = vm,
+        folders = state.folders,
+        note = noteMenu,
+        onDone = { noteMenu = null },
+        showError = showError,
+    )
 
     if (confirmRestore) {
         AlertDialog(
@@ -416,42 +345,6 @@ internal fun NotesListScreen(
                 ) { Text("باشه") }
             },
         )
-    }
-}
-
-/** Folder chip; text == null draws the "+" chip. */
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun FolderChip(
-    text: String?,
-    selected: Boolean,
-    onClick: () -> Unit,
-    onLongClick: (() -> Unit)? = null,
-) {
-    val scheme = MaterialTheme.colorScheme
-    Surface(
-        shape = CircleShape,
-        color = if (selected) scheme.primaryContainer else scheme.surface,
-        border = BorderStroke(if (selected) 2.dp else 1.dp, if (selected) scheme.primary else scheme.outlineVariant),
-        modifier = Modifier
-            .heightIn(min = 40.dp)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick),
-    ) {
-        Box(
-            modifier = Modifier.heightIn(min = 40.dp).padding(horizontal = 16.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            if (text == null) {
-                TbIcon(R.drawable.ic_tb_plus, "پوشه‌ی جدید", size = 20.dp, tint = scheme.onSurface)
-            } else {
-                Text(
-                    text = text,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = scheme.onSurface,
-                    maxLines = 1,
-                )
-            }
-        }
     }
 }
 
@@ -510,6 +403,212 @@ private fun NoteCard(
             }
         }
     }
+}
+
+/** Long-press dialogs of a note (pin / move to folder / delete), shared by the main page and the folder page. */
+@Composable
+private fun NoteActions(
+    vm: NotesViewModel,
+    folders: List<NoteFolderEntity>,
+    note: NoteListItem?,
+    onDone: () -> Unit,
+    showError: (String?) -> Unit,
+) {
+    if (note == null) return
+    // 0 = action list, 1 = choose folder, 2 = confirm delete
+    var stage by remember(note.id) { mutableStateOf(0) }
+    when (stage) {
+        0 -> AlertDialog(
+            onDismissRequest = onDone,
+            title = { Text(note.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            text = {
+                Column {
+                    ActionRow(if (note.pinned) "برداشتن سنجاق" else "سنجاق کردن") {
+                        onDone()
+                        vm.setPinned(note.id, !note.pinned, showError)
+                    }
+                    ActionRow("انتقال به پوشه") { stage = 1 }
+                    ActionRow("حذف", MaterialTheme.colorScheme.error) { stage = 2 }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = onDone) { Text("انصراف") } },
+        )
+        1 -> AlertDialog(
+            onDismissRequest = onDone,
+            title = { Text("انتقال به پوشه") },
+            text = {
+                Column {
+                    ActionRow("بدون پوشه", selected = note.folderId == null) {
+                        onDone()
+                        vm.moveNote(note.id, null, showError)
+                    }
+                    folders.forEach { folder ->
+                        ActionRow(folder.name, selected = note.folderId == folder.id) {
+                            onDone()
+                            vm.moveNote(note.id, folder.id, showError)
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = onDone) { Text("انصراف") } },
+        )
+        else -> ConfirmDeleteDialog(
+            itemName = note.title,
+            onConfirm = {
+                onDone()
+                vm.deleteNote(note.id, showError)
+            },
+            onDismiss = onDone,
+        )
+    }
+}
+
+/** Page of one folder: its notes (pinned first), search inside the folder, rename / delete in the menu. */
+@Composable
+internal fun NotesFolderScreen(
+    vm: NotesViewModel,
+    folderId: Long,
+    onBack: () -> Unit,
+    onOpenNote: (noteId: Long?, folderId: Long?) -> Unit,
+) {
+    val state by vm.state.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    val snackbar = remember { SnackbarHostState() }
+    var menuOpen by remember { mutableStateOf(false) }
+    var showRename by remember { mutableStateOf(false) }
+    var showDelete by remember { mutableStateOf(false) }
+    var noteMenu by remember { mutableStateOf<NoteListItem?>(null) }
+
+    LaunchedEffect(folderId) { vm.openFolder(folderId) }
+    // the state belongs to this folder only after openFolder took effect; a missing folder sends the user back
+    val ready = state.loaded && state.folderPageFor == folderId
+    val folderName = state.folderName
+    LaunchedEffect(ready, folderName) {
+        if (ready && folderName == null) onBack()
+    }
+    val showError: (String?) -> Unit = { error -> if (error != null) scope.launch { snackbar.showSnackbar(error) } }
+    val searching = state.folderQuery.isNotBlank()
+    val totalInFolder = state.folderTiles.firstOrNull { it.id == folderId }?.count ?: 0
+
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.fillMaxWidth()) {
+                PageHeader(
+                    title = folderName ?: "",
+                    onBack = onBack,
+                    actionIcon = R.drawable.ic_tb_dots_vertical,
+                    actionDescription = "گزینه‌ها",
+                    onAction = { menuOpen = true },
+                )
+                Box(modifier = Modifier.align(Alignment.CenterEnd).padding(end = 20.dp)) {
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("تغییر نام پوشه") },
+                            onClick = {
+                                menuOpen = false
+                                showRename = true
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("حذف پوشه", color = MaterialTheme.colorScheme.error) },
+                            onClick = {
+                                menuOpen = false
+                                showDelete = true
+                            },
+                        )
+                    }
+                }
+            }
+            AppTextField(
+                value = state.folderQuery,
+                onValueChange = vm::setFolderQuery,
+                label = "جستجو در این پوشه",
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+            )
+            Spacer(Modifier.height(8.dp))
+            if (ready && folderName != null) {
+                val isEmpty = state.folderPinned.isEmpty() && state.folderOthers.isEmpty()
+                LazyColumn(
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 104.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    if (isEmpty) {
+                        item(key = "empty") {
+                            EmptyState(
+                                icon = R.drawable.ic_tb_notes,
+                                title = if (searching && totalInFolder > 0) "چیزی پیدا نشد" else "این پوشه خالی است",
+                                message = if (searching && totalInFolder > 0) "عبارت دیگری را امتحان کن" else "با دکمه‌ی یادداشت جدید شروع کن",
+                            )
+                        }
+                    }
+                    items(state.folderPinned, key = { "n_" + it.id }) { item ->
+                        NoteCard(
+                            item = item,
+                            showFolder = false,
+                            onClick = { onOpenNote(item.id, folderId) },
+                            onLongClick = { noteMenu = item },
+                        )
+                    }
+                    items(state.folderOthers, key = { "n_" + it.id }) { item ->
+                        NoteCard(
+                            item = item,
+                            showFolder = false,
+                            onClick = { onOpenNote(item.id, folderId) },
+                            onLongClick = { noteMenu = item },
+                        )
+                    }
+                }
+            }
+        }
+        PillButton(
+            text = "یادداشت جدید",
+            onClick = { onOpenNote(null, folderId) },
+            icon = R.drawable.ic_tb_plus,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .navigationBarsPadding()
+                .padding(end = 20.dp, bottom = 20.dp),
+        )
+        SnackbarHost(
+            hostState = snackbar,
+            modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 88.dp),
+        )
+    }
+
+    if (showRename && folderName != null) {
+        FolderNameDialog(
+            title = "تغییر نام پوشه",
+            initial = folderName,
+            confirmText = "ذخیره",
+            onConfirm = { name, onError ->
+                vm.renameFolder(folderId, name) { error ->
+                    if (error == null) showRename = false else onError(error)
+                }
+            },
+            onDismiss = { showRename = false },
+        )
+    }
+    if (showDelete && folderName != null) {
+        ConfirmDeleteDialog(
+            itemName = folderName,
+            onConfirm = {
+                showDelete = false
+                // notes move out of the folder; go back once it is done
+                vm.deleteFolder(folderId) { error -> if (error == null) onBack() else showError(error) }
+            },
+            onDismiss = { showDelete = false },
+        )
+    }
+    NoteActions(
+        vm = vm,
+        folders = state.folders,
+        note = noteMenu,
+        onDone = { noteMenu = null },
+        showError = showError,
+    )
 }
 
 @Composable
