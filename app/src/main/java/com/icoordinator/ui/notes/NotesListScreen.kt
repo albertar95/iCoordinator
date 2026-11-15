@@ -10,6 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,6 +23,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -47,12 +49,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.icoordinator.ICoordinatorApp
 import com.icoordinator.R
+import com.icoordinator.accounting.AccountingFormat
 import com.icoordinator.data.BackupManager
+import com.icoordinator.personal.BlockType
 import com.icoordinator.personal.NoteFolderEntity
 import com.icoordinator.personal.PersonalBackup
 import com.icoordinator.security.LockState
@@ -365,43 +370,104 @@ private fun NoteCard(
             .fillMaxWidth()
             .combinedClickable(onClick = onClick, onLongClick = onLongClick),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.Top,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 18.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = item.title,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleLarge,
                     color = scheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
                 )
-                if (item.preview.isNotEmpty()) {
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        text = item.preview,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = scheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                if (item.pinned) {
+                    Spacer(Modifier.width(8.dp))
+                    TbIcon(R.drawable.ic_tb_pinned, "سنجاق‌شده", size = 20.dp, tint = scheme.primary)
                 }
+            }
+            if (item.lines.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    TagText(text = item.dateText)
-                    val folderName = item.folderName
-                    if (showFolder && folderName != null) {
-                        Spacer(Modifier.width(12.dp))
-                        TagText(text = folderName, icon = R.drawable.ic_tb_folder)
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    item.lines.forEach { line -> PreviewLine(line) }
+                    if (item.moreLines) {
+                        Text(text = "…", style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
                     }
                 }
+            } else if (item.preview.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = item.preview,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = scheme.onSurfaceVariant,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
-            if (item.pinned) {
-                Spacer(Modifier.width(8.dp))
-                TbIcon(R.drawable.ic_tb_pinned, "سنجاق‌شده", size = 20.dp, tint = scheme.primary)
+            Spacer(Modifier.height(12.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TagText(text = item.dateText)
+                if (item.imageCount > 0) {
+                    Spacer(Modifier.width(12.dp))
+                    TagText(text = AccountingFormat.digits(item.imageCount.toString()), icon = R.drawable.ic_tb_photo)
+                }
+                val folderName = item.folderName
+                if (showFolder && folderName != null) {
+                    Spacer(Modifier.width(12.dp))
+                    TagText(text = folderName, icon = R.drawable.ic_tb_folder)
+                }
             }
         }
+    }
+}
+
+/** One preview line of a note card, drawn the way it is saved: marker, styles, alignment. */
+@Composable
+private fun PreviewLine(line: NotePreviewLine) {
+    val scheme = MaterialTheme.colorScheme
+    val block = line.block
+    val base = when {
+        block.type == BlockType.HEADING -> MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, color = scheme.onSurface)
+        block.type == BlockType.CHECK && block.checked -> MaterialTheme.typography.bodyMedium.copy(
+            color = scheme.onSurfaceVariant,
+            textDecoration = TextDecoration.LineThrough,
+        )
+        else -> MaterialTheme.typography.bodyMedium.copy(color = scheme.onSurface)
+    }
+    Row(verticalAlignment = Alignment.Top) {
+        when (block.type) {
+            BlockType.BULLET -> PreviewMarker("•")
+            BlockType.NUMBERED -> PreviewMarker(AccountingFormat.digits("${line.number}."))
+            BlockType.CHECK -> Box(
+                modifier = Modifier.width(24.dp).padding(top = 3.dp),
+                contentAlignment = Alignment.TopStart,
+            ) {
+                if (block.checked) {
+                    TbIcon(R.drawable.ic_tb_square_check, "انجام‌شده", size = 16.dp, tint = scheme.primary)
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .padding(1.dp)
+                            .size(14.dp)
+                            .border(1.5.dp, scheme.onSurfaceVariant, RoundedCornerShape(3.dp)),
+                    )
+                }
+            }
+            else -> Unit
+        }
+        Text(
+            text = styledText(block),
+            style = alignedStyle(base, block.align),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun PreviewMarker(text: String) {
+    Box(modifier = Modifier.width(24.dp), contentAlignment = Alignment.TopStart) {
+        Text(text = text, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 

@@ -38,6 +38,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -129,7 +130,7 @@ private fun sizeFactor(step: Int): Double? = when (step) {
     else -> null
 }
 
-private fun styledText(block: NoteBlock): AnnotatedString = buildAnnotatedString {
+internal fun styledText(block: NoteBlock): AnnotatedString = buildAnnotatedString {
     append(block.text)
     val len = block.text.length
     // highlight first, so a text colour span added later wins over the dark highlight text colour
@@ -157,7 +158,7 @@ private fun styledText(block: NoteBlock): AnnotatedString = buildAnnotatedString
 }
 
 /** AUTO follows the text (start side, default direction); RIGHT / LEFT also pick the matching direction for neutral text. */
-private fun alignedStyle(style: TextStyle, align: BlockAlign): TextStyle = when (align) {
+internal fun alignedStyle(style: TextStyle, align: BlockAlign): TextStyle = when (align) {
     BlockAlign.AUTO -> style.copy(textAlign = TextAlign.Start)
     BlockAlign.RIGHT -> style.copy(textAlign = TextAlign.Right, textDirection = TextDirection.ContentOrRtl)
     BlockAlign.LEFT -> style.copy(textAlign = TextAlign.Left, textDirection = TextDirection.ContentOrLtr)
@@ -194,9 +195,20 @@ fun NoteEditorScreen(noteId: Long?, folderId: Long?, onBack: () -> Unit) {
     }
 
     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        PageHeader(title = "یادداشت", onBack = goBack)
-        if (state.loaded) {
-            EditorBody(vm = vm, state = state)
+        if (state.loaded && state.reading) {
+            PageHeader(
+                title = "یادداشت",
+                onBack = goBack,
+                actionIcon = R.drawable.ic_tb_pencil,
+                actionDescription = "ویرایش",
+                onAction = vm::startEditing,
+            )
+            ReaderBody(vm = vm, state = state)
+        } else {
+            PageHeader(title = "یادداشت", onBack = goBack)
+            if (state.loaded) {
+                EditorBody(vm = vm, state = state)
+            }
         }
     }
 }
@@ -327,6 +339,73 @@ private fun ColumnScope.EditorBody(vm: NoteEditorViewModel, state: EditorState) 
     }
 }
 
+/** Text style of a block in the note page (editing and reading). */
+@Composable
+private fun blockBaseStyle(block: NoteBlock): TextStyle {
+    val scheme = MaterialTheme.colorScheme
+    return when {
+        block.type == BlockType.HEADING -> MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, color = scheme.onSurface)
+        block.type == BlockType.CHECK && block.checked -> MaterialTheme.typography.bodyLarge.copy(
+            color = scheme.onSurfaceVariant,
+            textDecoration = TextDecoration.LineThrough,
+        )
+        else -> MaterialTheme.typography.bodyLarge.copy(color = scheme.onSurface)
+    }
+}
+
+/** Read mode: the note as saved, not editable (text can be selected and copied; checklist items can still be ticked). */
+@Composable
+private fun ColumnScope.ReaderBody(vm: NoteEditorViewModel, state: EditorState) {
+    val scheme = MaterialTheme.colorScheme
+    SelectionContainer(modifier = Modifier.weight(1f).fillMaxWidth()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().navigationBarsPadding(),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            if (state.title.isNotBlank()) {
+                item(key = "title") {
+                    Column {
+                        Text(
+                            text = state.title,
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = scheme.onSurface,
+                        )
+                        HorizontalDivider(
+                            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
+                            thickness = 1.dp,
+                            color = scheme.outlineVariant,
+                        )
+                    }
+                }
+            }
+            itemsIndexed(state.blocks, key = { _, block -> block.id }) { index, block ->
+                if (block.type == BlockType.IMAGE) {
+                    ImageBlock(block = block, onLongPress = {})
+                } else {
+                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                        when (block.type) {
+                            BlockType.BULLET -> MarkerText("•")
+                            BlockType.NUMBERED -> MarkerText(AccountingFormat.digits("${NoteBlocks.numberFor(state.blocks, index)}."))
+                            BlockType.CHECK -> CheckCircle(
+                                checked = block.checked,
+                                onCheckedChange = { vm.setChecked(block.id, it) },
+                                modifier = Modifier.size(40.dp),
+                            )
+                            else -> Unit
+                        }
+                        Text(
+                            text = styledText(block),
+                            style = alignedStyle(blockBaseStyle(block), block.align),
+                            modifier = Modifier.weight(1f).padding(vertical = 8.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun TextBlock(block: NoteBlock, number: Int, state: EditorState, vm: NoteEditorViewModel) {
     val scheme = MaterialTheme.colorScheme
@@ -358,14 +437,7 @@ private fun TextBlock(block: NoteBlock, number: Int, state: EditorState, vm: Not
     // while the model is one frame behind the field, show the field's own value untouched
     val shown = if (styled.text == tfv.text && tfv.annotatedString != styled) tfv.copy(annotatedString = styled) else tfv
 
-    val baseStyle: TextStyle = when {
-        block.type == BlockType.HEADING -> MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, color = scheme.onSurface)
-        block.type == BlockType.CHECK && block.checked -> MaterialTheme.typography.bodyLarge.copy(
-            color = scheme.onSurfaceVariant,
-            textDecoration = TextDecoration.LineThrough,
-        )
-        else -> MaterialTheme.typography.bodyLarge.copy(color = scheme.onSurface)
-    }
+    val baseStyle = blockBaseStyle(block)
 
     val rowModifier = if (state.allSelected) {
         Modifier.fillMaxWidth().background(LocalTextSelectionColors.current.backgroundColor, RoundedCornerShape(8.dp))

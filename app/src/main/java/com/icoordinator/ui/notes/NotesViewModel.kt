@@ -5,6 +5,10 @@ import androidx.lifecycle.viewModelScope
 import com.icoordinator.ICoordinatorApp
 import com.icoordinator.accounting.AccountingFormat
 import com.icoordinator.domain.PersianCalendar
+import com.icoordinator.personal.BlockType
+import com.icoordinator.personal.NoteBlock
+import com.icoordinator.personal.NoteBlocks
+import com.icoordinator.personal.NoteCodec
 import com.icoordinator.personal.NoteEntity
 import com.icoordinator.personal.NoteFolderEntity
 import com.icoordinator.personal.NoteText
@@ -17,9 +21,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/** One line of a note card's preview: a text block as saved, with its list number. */
+data class NotePreviewLine(val block: NoteBlock, val number: Int)
 
 /** One row of the notes list, already prepared for display. */
 data class NoteListItem(
@@ -30,6 +38,11 @@ data class NoteListItem(
     val preview: String,
     val dateText: String,
     val pinned: Boolean,
+    /** First lines of the note in their saved format (bullet, check, heading, styles). */
+    val lines: List<NotePreviewLine> = emptyList(),
+    /** More text follows the shown lines. */
+    val moreLines: Boolean = false,
+    val imageCount: Int = 0,
 )
 
 /**
@@ -88,7 +101,10 @@ class NotesViewModel : ViewModel() {
             folderPinned = inFolder.filter { it.pinned },
             folderOthers = inFolder.filter { !it.pinned },
         )
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), NotesState())
+    }
+        // the card previews decode every note: keep that off the main thread
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), NotesState())
 
     fun setQuery(text: String) {
         query.value = text
@@ -189,6 +205,12 @@ class NotesViewModel : ViewModel() {
             previewSource = ""
         }
         val preview = if (previewSource.length <= PREVIEW_CHARS) previewSource else previewSource.take(PREVIEW_CHARS).trimEnd() + "…"
+        val blocks = NoteCodec.decode(n.content).blocks
+        var textLines = blocks.withIndex()
+            .filter { it.value.type != BlockType.IMAGE && it.value.text.isNotBlank() }
+            .map { NotePreviewLine(it.value, NoteBlocks.numberFor(blocks, it.index)) }
+        // without a title the first line is already shown as the title
+        if (title.isEmpty()) textLines = textLines.drop(1)
         return NoteListItem(
             id = n.id,
             folderId = n.folderId,
@@ -197,6 +219,9 @@ class NotesViewModel : ViewModel() {
             preview = preview,
             dateText = dateText(n.updatedAt),
             pinned = n.pinned,
+            lines = textLines.take(PREVIEW_LINES),
+            moreLines = textLines.size > PREVIEW_LINES,
+            imageCount = blocks.count { it.type == BlockType.IMAGE },
         )
     }
 
@@ -207,6 +232,7 @@ class NotesViewModel : ViewModel() {
 
     private companion object {
         const val PREVIEW_CHARS = 120
+        const val PREVIEW_LINES = 5
         const val TITLE_FALLBACK_CHARS = 60
     }
 }

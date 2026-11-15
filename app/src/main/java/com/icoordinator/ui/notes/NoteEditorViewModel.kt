@@ -50,6 +50,8 @@ data class EditorState(
     val structRevision: Long = 0L,
     /** "Select all" was used: the whole note (every block) is selected, not only the focused block. */
     val allSelected: Boolean = false,
+    /** Read mode: an existing note opens for reading; the edit button switches to editing. */
+    val reading: Boolean = false,
 )
 
 /** Text blocks that have text: what a whole-note style acts on. */
@@ -151,7 +153,36 @@ class NoteEditorViewModel(noteId: Long?, private val initialFolderId: Long?) : V
         folderId = entity.folderId
         val doc = NoteCodec.decode(entity.content)
         lastSavedKey = saveKey(entity.title, doc)
-        _state.value = EditorState(loaded = true, title = entity.title, blocks = doc.blocks)
+        _state.value = EditorState(loaded = true, title = entity.title, blocks = doc.blocks, reading = true)
+    }
+
+    // ---- read mode ----
+
+    /** Edit button of read mode: editing starts with the cursor at the end of the last text block. */
+    fun startEditing() {
+        val s = _state.value
+        if (!s.reading) return
+        var blocks = s.blocks
+        var last = blocks.lastOrNull { it.type != BlockType.IMAGE }
+        if (last == null) {
+            // only images: give the text an empty line at the end
+            last = NoteBlock(id = NoteBlocks.nextId(NoteDocument(blocks)), type = BlockType.PARAGRAPH)
+            blocks = blocks + last
+        }
+        val id = last.id
+        val end = last.text.length
+        _state.update {
+            it.copy(
+                reading = false,
+                blocks = blocks,
+                focusedBlockId = id,
+                selStart = end,
+                selEnd = end,
+                pending = emptyMap(),
+                allSelected = false,
+                focusRequest = FocusRequest(id, end, ++focusToken),
+            )
+        }
     }
 
     // ---- title and focus ----
