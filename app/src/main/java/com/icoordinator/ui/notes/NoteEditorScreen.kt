@@ -37,12 +37,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -58,6 +60,7 @@ import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
@@ -67,8 +70,13 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.ClipboardManager
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalTextToolbar
+import androidx.compose.ui.platform.TextToolbar
+import androidx.compose.ui.platform.TextToolbarStatus
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextRange
@@ -262,22 +270,37 @@ private fun ColumnScope.EditorBody(vm: NoteEditorViewModel, state: EditorState) 
         color = MaterialTheme.colorScheme.outlineVariant,
     )
 
-    LazyColumn(
-        state = listState,
-        modifier = Modifier.weight(1f).fillMaxWidth(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        itemsIndexed(state.blocks, key = { _, block -> block.id }) { index, block ->
-            if (block.type == BlockType.IMAGE) {
-                ImageBlock(block = block, onLongPress = { imageToDelete = block.id })
-            } else {
-                TextBlock(
-                    block = block,
-                    number = NoteBlocks.numberFor(state.blocks, index),
-                    state = state,
-                    vm = vm,
-                )
+    // the text menu's "Select all" selects the whole note, not only the line (block) under the cursor
+    val baseToolbar = LocalTextToolbar.current
+    val clipboard = LocalClipboardManager.current
+    val noteToolbar = remember(baseToolbar, vm, clipboard) { NoteTextToolbar(baseToolbar, vm, clipboard) }
+
+    CompositionLocalProvider(LocalTextToolbar provides noteToolbar) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            itemsIndexed(state.blocks, key = { _, block -> block.id }) { index, block ->
+                if (block.type == BlockType.IMAGE) {
+                    Box(
+                        modifier = if (state.allSelected) {
+                            Modifier.border(3.dp, LocalTextSelectionColors.current.handleColor, RoundedCornerShape(16.dp))
+                        } else {
+                            Modifier
+                        },
+                    ) {
+                        ImageBlock(block = block, onLongPress = { imageToDelete = block.id })
+                    }
+                } else {
+                    TextBlock(
+                        block = block,
+                        number = NoteBlocks.numberFor(state.blocks, index),
+                        state = state,
+                        vm = vm,
+                    )
+                }
             }
         }
     }
@@ -344,7 +367,12 @@ private fun TextBlock(block: NoteBlock, number: Int, state: EditorState, vm: Not
         else -> MaterialTheme.typography.bodyLarge.copy(color = scheme.onSurface)
     }
 
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+    val rowModifier = if (state.allSelected) {
+        Modifier.fillMaxWidth().background(LocalTextSelectionColors.current.backgroundColor, RoundedCornerShape(8.dp))
+    } else {
+        Modifier.fillMaxWidth()
+    }
+    Row(modifier = rowModifier, verticalAlignment = Alignment.Top) {
         when (block.type) {
             BlockType.BULLET -> MarkerText("•")
             BlockType.NUMBERED -> MarkerText(AccountingFormat.digits("$number."))
@@ -360,6 +388,13 @@ private fun TextBlock(block: NoteBlock, number: Int, state: EditorState, vm: Not
             onValueChange = { new ->
                 tfv = new
                 vm.onBlockValueChange(block.id, new.text, new.selection.start, new.selection.end)
+                // The model rewrote this block (multi-line paste split into lines, whole note replaced): take its
+                // text now. Waiting one frame let the keyboard send the old text again, and it was pasted twice.
+                val latest = vm.state.value.blocks.firstOrNull { it.id == block.id }
+                val typed = new.text.replace("\r\n", "\n").replace('\r', '\n')
+                if (latest != null && latest.text != typed) {
+                    tfv = TextFieldValue(styledText(latest), TextRange(new.selection.end.coerceIn(0, latest.text.length)))
+                }
             },
             textStyle = alignedStyle(baseStyle, block.align),
             cursorBrush = SolidColor(scheme.primary),
@@ -382,6 +417,61 @@ private fun TextBlock(block: NoteBlock, number: Int, state: EditorState, vm: Not
                         false
                     }
                 },
+        )
+    }
+}
+
+/**
+ * Wraps the platform text menu. "Select all" selects the whole note; while the whole note is selected,
+ * copy and cut act on all of it and paste replaces all of it.
+ */
+private class NoteTextToolbar(
+    private val base: TextToolbar,
+    private val vm: NoteEditorViewModel,
+    private val clipboard: ClipboardManager,
+) : TextToolbar {
+    override val status: TextToolbarStatus get() = base.status
+
+    override fun hide() = base.hide()
+
+    override fun showMenu(
+        rect: Rect,
+        onCopyRequested: (() -> Unit)?,
+        onPasteRequested: (() -> Unit)?,
+        onCutRequested: (() -> Unit)?,
+        onSelectAllRequested: (() -> Unit)?,
+    ) {
+        if (vm.isAllSelected()) {
+            showWholeNoteMenu(rect, onPasteRequested)
+            return
+        }
+        // null from the field means its own text is already all selected; the rest of the note may not be
+        val selectAll: (() -> Unit)? = if (onSelectAllRequested != null || vm.hasContentOutsideFocused()) {
+            {
+                onSelectAllRequested?.invoke()
+                vm.selectAll()
+                if (vm.isAllSelected()) showWholeNoteMenu(rect, onPasteRequested)
+            }
+        } else {
+            null
+        }
+        base.showMenu(rect, onCopyRequested, onPasteRequested, onCutRequested, selectAll)
+    }
+
+    private fun showWholeNoteMenu(rect: Rect, onPasteRequested: (() -> Unit)?) {
+        base.showMenu(
+            rect,
+            {
+                clipboard.setText(AnnotatedString(vm.wholeNoteText()))
+                base.hide()
+            },
+            onPasteRequested,
+            {
+                clipboard.setText(AnnotatedString(vm.wholeNoteText()))
+                vm.deleteWholeNote()
+                base.hide()
+            },
+            null,
         )
     }
 }
@@ -435,9 +525,6 @@ private fun ImageBlock(block: NoteBlock, onLongPress: () -> Unit) {
 @Composable
 private fun EditorToolbar(state: EditorState, vm: NoteEditorViewModel, onPickImage: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
-    val focusedBlock = state.blocks.firstOrNull { it.id == state.focusedBlockId }
-    val focusedType = focusedBlock?.type
-    val focusedAlign = focusedBlock?.takeIf { it.type != BlockType.IMAGE }?.align ?: BlockAlign.AUTO
     var highlightMenu by remember { mutableStateOf(false) }
     var colorMenu by remember { mutableStateOf(false) }
     var sizeMenu by remember { mutableStateOf(false) }
@@ -538,25 +625,25 @@ private fun EditorToolbar(state: EditorState, vm: NoteEditorViewModel, onPickIma
                     }
                 }
             }
-            ToolbarButton(R.drawable.ic_tb_heading, "عنوان", focusedType == BlockType.HEADING) {
+            ToolbarButton(R.drawable.ic_tb_heading, "عنوان", state.isTypeActive(BlockType.HEADING)) {
                 vm.toggleBlockType(BlockType.HEADING)
             }
-            ToolbarButton(R.drawable.ic_tb_list, "فهرست نقطه‌ای", focusedType == BlockType.BULLET) {
+            ToolbarButton(R.drawable.ic_tb_list, "فهرست نقطه‌ای", state.isTypeActive(BlockType.BULLET)) {
                 vm.toggleBlockType(BlockType.BULLET)
             }
-            ToolbarButton(R.drawable.ic_tb_list_numbers, "فهرست شماره‌دار", focusedType == BlockType.NUMBERED) {
+            ToolbarButton(R.drawable.ic_tb_list_numbers, "فهرست شماره‌دار", state.isTypeActive(BlockType.NUMBERED)) {
                 vm.toggleBlockType(BlockType.NUMBERED)
             }
-            ToolbarButton(R.drawable.ic_tb_square_check, "فهرست کارها", focusedType == BlockType.CHECK) {
+            ToolbarButton(R.drawable.ic_tb_square_check, "فهرست کارها", state.isTypeActive(BlockType.CHECK)) {
                 vm.toggleBlockType(BlockType.CHECK)
             }
-            ToolbarButton(R.drawable.ic_tb_align_right, "راست‌چین", focusedAlign == BlockAlign.RIGHT) {
+            ToolbarButton(R.drawable.ic_tb_align_right, "راست‌چین", state.isAlignActive(BlockAlign.RIGHT)) {
                 vm.toggleAlign(BlockAlign.RIGHT)
             }
-            ToolbarButton(R.drawable.ic_tb_align_center, "وسط‌چین", focusedAlign == BlockAlign.CENTER) {
+            ToolbarButton(R.drawable.ic_tb_align_center, "وسط‌چین", state.isAlignActive(BlockAlign.CENTER)) {
                 vm.toggleAlign(BlockAlign.CENTER)
             }
-            ToolbarButton(R.drawable.ic_tb_align_left, "چپ‌چین", focusedAlign == BlockAlign.LEFT) {
+            ToolbarButton(R.drawable.ic_tb_align_left, "چپ‌چین", state.isAlignActive(BlockAlign.LEFT)) {
                 vm.toggleAlign(BlockAlign.LEFT)
             }
             ToolbarButton(R.drawable.ic_tb_photo, "افزودن عکس", false, onPickImage)

@@ -389,9 +389,9 @@ private fun MonthCard(state: DashboardState, due: DueTotals, onPrev: () -> Unit,
     CardBox {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // the right-pointing chevron (shown at the start side under RTL) moves forward to the next month
-                IconButton(onClick = onNext) {
-                    TbIcon(R.drawable.ic_tb_chevron_right, "ماه بعد", tint = scheme.onSurface)
+                // like the calendar: previous on the right (start side under RTL), next on the left
+                IconButton(onClick = onPrev) {
+                    TbIcon(R.drawable.ic_tb_chevron_left, "ماه قبل", tint = scheme.onSurface)
                 }
                 Text(
                     text = AccountingFormat.monthTitle(state.year, state.month),
@@ -400,8 +400,8 @@ private fun MonthCard(state: DashboardState, due: DueTotals, onPrev: () -> Unit,
                     modifier = Modifier.weight(1f),
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
-                IconButton(onClick = onPrev) {
-                    TbIcon(R.drawable.ic_tb_chevron_left, "ماه قبل", tint = scheme.onSurface)
+                IconButton(onClick = onNext) {
+                    TbIcon(R.drawable.ic_tb_chevron_right, "ماه بعد", tint = scheme.onSurface)
                 }
             }
             Spacer(Modifier.height(8.dp))

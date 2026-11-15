@@ -9,6 +9,7 @@ import com.icoordinator.personal.NoteBlock
 import com.icoordinator.personal.NoteBlocks
 import com.icoordinator.personal.NoteCodec
 import com.icoordinator.personal.NoteDocument
+import com.icoordinator.personal.NoteText
 import com.icoordinator.personal.PersonalRepository
 import com.icoordinator.personal.SpanKind
 import com.icoordinator.personal.SpanOps
@@ -47,10 +48,20 @@ data class EditorState(
     val focusRequest: FocusRequest? = null,
     /** Bumped when the model changes a block's text itself (split, merge): the text fields must take the model text. */
     val structRevision: Long = 0L,
+    /** "Select all" was used: the whole note (every block) is selected, not only the focused block. */
+    val allSelected: Boolean = false,
 )
+
+/** Text blocks that have text: what a whole-note style acts on. */
+private fun EditorState.styledBlocks(): List<NoteBlock> =
+    blocks.filter { it.type != BlockType.IMAGE && it.text.isNotEmpty() }
 
 /** Whether [kind] is active at the current selection of the focused block (pending styles win over the text). */
 fun EditorState.isStyleActive(kind: SpanKind): Boolean {
+    if (allSelected) {
+        val list = styledBlocks()
+        return list.isNotEmpty() && list.all { SpanOps.isActive(it.spans, 0, it.text.length, kind) }
+    }
     if (selStart == selEnd && pending.containsKey(kind)) return pending[kind] != null
     val b = blocks.firstOrNull { it.id == focusedBlockId } ?: return false
     return SpanOps.isActive(b.spans, minOf(selStart, selEnd), maxOf(selStart, selEnd), kind)
@@ -58,9 +69,33 @@ fun EditorState.isStyleActive(kind: SpanKind): Boolean {
 
 /** Value of [kind] (colour / highlight index, size step) at the current selection, null when none or mixed. */
 fun EditorState.styleValue(kind: SpanKind): Int? {
+    if (allSelected) {
+        val values = styledBlocks().map { SpanOps.valueAt(it.spans, 0, it.text.length, kind) }
+        val first = values.firstOrNull() ?: return null
+        return if (values.all { it == first }) first else null
+    }
     if (selStart == selEnd && pending.containsKey(kind)) return pending[kind]
     val b = blocks.firstOrNull { it.id == focusedBlockId } ?: return null
     return SpanOps.valueAt(b.spans, minOf(selStart, selEnd), maxOf(selStart, selEnd), kind)
+}
+
+/** Whether the heading / list button of [type] shows as on: the focused block, or every text block when all is selected. */
+fun EditorState.isTypeActive(type: BlockType): Boolean {
+    if (allSelected) {
+        val list = blocks.filter { it.type != BlockType.IMAGE }
+        return list.isNotEmpty() && list.all { it.type == type }
+    }
+    return blocks.firstOrNull { it.id == focusedBlockId }?.type == type
+}
+
+/** Same as [isTypeActive] for the alignment buttons. */
+fun EditorState.isAlignActive(align: BlockAlign): Boolean {
+    if (allSelected) {
+        val list = blocks.filter { it.type != BlockType.IMAGE }
+        return list.isNotEmpty() && list.all { it.align == align }
+    }
+    val b = blocks.firstOrNull { it.id == focusedBlockId } ?: return false
+    return b.type != BlockType.IMAGE && b.align == align
 }
 
 class NoteEditorViewModel(noteId: Long?, private val initialFolderId: Long?) : ViewModel() {
@@ -76,6 +111,14 @@ class NoteEditorViewModel(noteId: Long?, private val initialFolderId: Long?) : V
     private var focusToken = 0L
     private var pendingBlockId: Long? = null
     private var pendingAnchor: Int = -1
+
+    /**
+     * The last multi-line text that was split into blocks (block id, text, time). The keyboard can send the
+     * same value once more before the field takes the split text; splitting it again pasted everything twice.
+     */
+    private var lastSplitBlockId: Long? = null
+    private var lastSplitText: String? = null
+    private var lastSplitAt: Long = 0L
 
     /** Own scope: the final save of onCleared must outlive viewModelScope, which is already cancelled then. */
     private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -121,13 +164,13 @@ class NoteEditorViewModel(noteId: Long?, private val initialFolderId: Long?) : V
     fun onBlockFocused(blockId: Long) {
         _state.update { s ->
             if (s.focusedBlockId == blockId) s
-            else s.copy(focusedBlockId = blockId, selStart = 0, selEnd = 0, pending = emptyMap())
+            else s.copy(focusedBlockId = blockId, selStart = 0, selEnd = 0, pending = emptyMap(), allSelected = false)
         }
     }
 
     /** The title field has the focus: toolbar actions have no block to act on until a block is focused again. */
     fun onTitleFocused() {
-        _state.update { it.copy(focusedBlockId = null, selStart = 0, selEnd = 0, pending = emptyMap()) }
+        _state.update { it.copy(focusedBlockId = null, selStart = 0, selEnd = 0, pending = emptyMap(), allSelected = false) }
     }
 
     /** Gives the focus back to the focused block without touching its selection (after a popup closed). */
@@ -151,6 +194,12 @@ class NoteEditorViewModel(noteId: Long?, private val initialFolderId: Long?) : V
             onBlockSelection(blockId, selStart, selEnd)
             return
         }
+        if (s.allSelected) {
+            // typing, deleting or pasting over the whole selected note replaces all of it
+            replaceWholeNote(block, text, selStart, selEnd)
+            return
+        }
+        if (text.contains('\n') && isRepeatedSplit(blockId, text)) return
         if (text == "\n" && block.text.isEmpty() && endsListOnEnter(block.type)) {
             endList(block)
             return
@@ -186,14 +235,75 @@ class NoteEditorViewModel(noteId: Long?, private val initialFolderId: Long?) : V
     fun onBlockSelection(blockId: Long, selStart: Int, selEnd: Int) {
         val keepPending = pendingBlockId == blockId && selStart == selEnd && selStart == pendingAnchor
         _state.update {
+            val len = it.blocks.firstOrNull { b -> b.id == blockId }?.text?.length ?: 0
+            // the whole-note selection stays only while this block is still selected end to end
+            val wholeBlock = minOf(selStart, selEnd) == 0 && maxOf(selStart, selEnd) == len
             it.copy(
                 focusedBlockId = blockId,
                 selStart = selStart,
                 selEnd = selEnd,
                 pending = if (keepPending && it.focusedBlockId == blockId) it.pending else emptyMap(),
+                allSelected = it.allSelected && it.focusedBlockId == blockId && wholeBlock,
             )
         }
     }
+
+    // ---- select all ----
+
+    /** "Select all" from the text menu: the whole note is selected (copy, cut, delete and the toolbar act on all of it). */
+    fun selectAll() {
+        val s = _state.value
+        if (s.focusedBlockId == null) return
+        if (s.blocks.none { it.type == BlockType.IMAGE || it.text.isNotEmpty() }) return
+        _state.update { it.copy(allSelected = true, pending = emptyMap()) }
+    }
+
+    fun isAllSelected(): Boolean = _state.value.allSelected
+
+    /** Whether the note has text or images outside the focused block (then "Select all" means more than this block). */
+    fun hasContentOutsideFocused(): Boolean {
+        val s = _state.value
+        return s.blocks.any { it.id != s.focusedBlockId && (it.type == BlockType.IMAGE || it.text.isNotEmpty()) }
+    }
+
+    /** Plain text of the whole note (images left out), for copy and cut. */
+    fun wholeNoteText(): String = NoteText.plainText(NoteDocument(_state.value.blocks))
+
+    /** Cut / delete of the whole selected note: one empty block of the focused block's kind stays. */
+    fun deleteWholeNote() {
+        val s = _state.value
+        val block = s.blocks.firstOrNull { it.id == s.focusedBlockId && it.type != BlockType.IMAGE }
+            ?: s.blocks.firstOrNull { it.type != BlockType.IMAGE }
+        if (block == null) {
+            _state.update { it.copy(allSelected = false) }
+            return
+        }
+        replaceWholeNote(block, "", 0, 0)
+    }
+
+    /** The whole note becomes [block] with [text] (split into blocks when it has new lines); images are dropped. */
+    private fun replaceWholeNote(block: NoteBlock, text: String, selStart: Int, selEnd: Int) {
+        val empty = block.copy(text = "", spans = emptyList(), checked = false)
+        pendingBlockId = null
+        _state.update { st ->
+            st.copy(
+                blocks = listOf(empty),
+                focusedBlockId = empty.id,
+                selStart = 0,
+                selEnd = 0,
+                pending = emptyMap(),
+                allSelected = false,
+                focusRequest = if (text.isEmpty()) FocusRequest(empty.id, 0, ++focusToken) else st.focusRequest,
+                structRevision = st.structRevision + 1,
+            )
+        }
+        changed()
+        if (text.isNotEmpty()) onBlockValueChange(empty.id, text, selStart, selEnd)
+    }
+
+    private fun isRepeatedSplit(blockId: Long, text: String): Boolean =
+        lastSplitBlockId == blockId && lastSplitText == text &&
+            System.currentTimeMillis() - lastSplitAt < REPEAT_WINDOW_MS
 
     /** Pure insertion at one place -> [start, end) of the inserted text; anything else -> null. */
     private fun insertionRange(oldText: String, newText: String): Pair<Int, Int>? {
@@ -252,6 +362,9 @@ class NoteEditorViewModel(noteId: Long?, private val initialFolderId: Long?) : V
 
     /** Enter (one typed "\n") splits the block; a pasted multi-line text becomes several blocks of the same type. */
     private fun handleNewlines(block: NoteBlock, text: String, cursorAfter: Int) {
+        lastSplitBlockId = block.id
+        lastSplitText = text
+        lastSplitAt = System.currentTimeMillis()
         val pasted = text.length - block.text.length > 1
         var current = block.copy(text = text, spans = SpanOps.applyEdit(block.text, text, block.spans))
         val doc = NoteDocument(_state.value.blocks)
@@ -338,6 +451,15 @@ class NoteEditorViewModel(noteId: Long?, private val initialFolderId: Long?) : V
     /** BOLD / ITALIC / UNDERLINE. With a selection it toggles the range, otherwise it toggles a pending style. */
     fun toggleStyle(kind: SpanKind) {
         val s = _state.value
+        if (s.allSelected) {
+            val want = !s.isStyleActive(kind)
+            changeAllTextBlocks { b ->
+                val len = b.text.length
+                if (len == 0 || SpanOps.isActive(b.spans, 0, len, kind) == want) b
+                else b.copy(spans = SpanOps.toggle(b.spans, len, 0, len, kind))
+            }
+            return
+        }
         val id = s.focusedBlockId ?: return
         val block = s.blocks.firstOrNull { it.id == id } ?: return
         if (block.type == BlockType.IMAGE) return
@@ -356,6 +478,13 @@ class NoteEditorViewModel(noteId: Long?, private val initialFolderId: Long?) : V
     /** HIGHLIGHT / COLOR / SIZE; [value] null clears the style. */
     fun setStyleValue(kind: SpanKind, value: Int?) {
         val s = _state.value
+        if (s.allSelected) {
+            changeAllTextBlocks { b ->
+                val len = b.text.length
+                if (len == 0) b else b.copy(spans = SpanOps.setValue(b.spans, len, 0, len, kind, value))
+            }
+            return
+        }
         val id = s.focusedBlockId ?: return
         val block = s.blocks.firstOrNull { it.id == id } ?: return
         if (block.type == BlockType.IMAGE) return
@@ -378,6 +507,11 @@ class NoteEditorViewModel(noteId: Long?, private val initialFolderId: Long?) : V
 
     /** Heading / bullet / numbered / checklist button: the same type again goes back to PARAGRAPH. */
     fun toggleBlockType(type: BlockType) {
+        if (_state.value.allSelected) {
+            val target = if (_state.value.isTypeActive(type)) BlockType.PARAGRAPH else type
+            changeAllTextBlocks { it.copy(type = target, checked = false) }
+            return
+        }
         val id = _state.value.focusedBlockId ?: return
         val block = _state.value.blocks.firstOrNull { it.id == id } ?: return
         if (block.type == BlockType.IMAGE) return
@@ -388,6 +522,12 @@ class NoteEditorViewModel(noteId: Long?, private val initialFolderId: Long?) : V
 
     /** Right / centre / left button: the same alignment again goes back to AUTO. No-op for images or without a focused block. */
     fun toggleAlign(align: BlockAlign) {
+        if (_state.value.allSelected) {
+            val target = if (_state.value.isAlignActive(align)) BlockAlign.AUTO else align
+            changeAllTextBlocks { it.copy(align = target) }
+            restoreFocus()
+            return
+        }
         val id = _state.value.focusedBlockId ?: return
         val block = _state.value.blocks.firstOrNull { it.id == id } ?: return
         if (block.type == BlockType.IMAGE) return
@@ -423,6 +563,7 @@ class NoteEditorViewModel(noteId: Long?, private val initialFolderId: Long?) : V
                 selStart = 0,
                 selEnd = 0,
                 pending = emptyMap(),
+                allSelected = false,
                 focusRequest = FocusRequest(paragraphId, 0, ++focusToken),
             )
         }
@@ -433,8 +574,14 @@ class NoteEditorViewModel(noteId: Long?, private val initialFolderId: Long?) : V
     fun deleteImage(blockId: Long) {
         _state.update { st ->
             val rest = st.blocks.filter { it.id != blockId }
-            st.copy(blocks = if (rest.isEmpty()) NoteDocument.empty().blocks else rest)
+            st.copy(blocks = if (rest.isEmpty()) NoteDocument.empty().blocks else rest, allSelected = false)
         }
+        changed()
+    }
+
+    /** Applies [change] to every text block (whole-note selection); the selection stays. */
+    private fun changeAllTextBlocks(change: (NoteBlock) -> NoteBlock) {
+        _state.update { st -> st.copy(blocks = st.blocks.map { if (it.type == BlockType.IMAGE) it else change(it) }) }
         changed()
     }
 
@@ -487,5 +634,6 @@ class NoteEditorViewModel(noteId: Long?, private val initialFolderId: Long?) : V
     private companion object {
         const val AUTOSAVE_DELAY_MS = 800L
         const val KEEP_SELECTION = -1
+        const val REPEAT_WINDOW_MS = 1500L
     }
 }

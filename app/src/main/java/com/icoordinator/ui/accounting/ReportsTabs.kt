@@ -81,13 +81,13 @@ private fun TabScaffold(content: @Composable () -> Unit) {
     ) { content() }
 }
 
-/** Year arrows: the right-pointing chevron (start side under RTL) moves forward to the next year. */
+/** Year arrows, like the calendar: previous year on the right (start side under RTL), next year on the left. */
 @Composable
 private fun YearSelector(year: Int, onYear: (Int) -> Unit) {
     val scheme = MaterialTheme.colorScheme
     Row(verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = { onYear(year + 1) }) {
-            TbIcon(R.drawable.ic_tb_chevron_right, "سال بعد", tint = scheme.onSurface)
+        IconButton(onClick = { onYear(year - 1) }) {
+            TbIcon(R.drawable.ic_tb_chevron_left, "سال قبل", tint = scheme.onSurface)
         }
         Text(
             text = AccountingFormat.digits(year.toString()),
@@ -96,8 +96,8 @@ private fun YearSelector(year: Int, onYear: (Int) -> Unit) {
             modifier = Modifier.weight(1f),
             textAlign = TextAlign.Center,
         )
-        IconButton(onClick = { onYear(year - 1) }) {
-            TbIcon(R.drawable.ic_tb_chevron_left, "سال قبل", tint = scheme.onSurface)
+        IconButton(onClick = { onYear(year + 1) }) {
+            TbIcon(R.drawable.ic_tb_chevron_right, "سال بعد", tint = scheme.onSurface)
         }
     }
 }
@@ -376,9 +376,9 @@ internal fun CompareReportTab(data: ReportsData) {
 
     TabScaffold {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // the right-pointing chevron (start side under RTL) moves forward to the next month
-            IconButton(onClick = { monthIndex += 1 }) {
-                TbIcon(R.drawable.ic_tb_chevron_right, "ماه بعد", tint = scheme.onSurface)
+            // like the calendar: previous on the right (start side under RTL), next on the left
+            IconButton(onClick = { monthIndex -= 1 }) {
+                TbIcon(R.drawable.ic_tb_chevron_left, "ماه قبل", tint = scheme.onSurface)
             }
             Text(
                 text = AccountingFormat.monthTitle(year, month),
@@ -387,8 +387,8 @@ internal fun CompareReportTab(data: ReportsData) {
                 modifier = Modifier.weight(1f),
                 textAlign = TextAlign.Center,
             )
-            IconButton(onClick = { monthIndex -= 1 }) {
-                TbIcon(R.drawable.ic_tb_chevron_left, "ماه قبل", tint = scheme.onSurface)
+            IconButton(onClick = { monthIndex += 1 }) {
+                TbIcon(R.drawable.ic_tb_chevron_right, "ماه بعد", tint = scheme.onSurface)
             }
         }
         ReportSection("مقایسه‌ی هزینه‌ها با " + prevTitle) {
