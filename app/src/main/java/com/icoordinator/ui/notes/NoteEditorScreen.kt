@@ -32,12 +32,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -49,6 +51,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -357,48 +360,53 @@ private fun blockBaseStyle(block: NoteBlock): TextStyle {
 @Composable
 private fun ColumnScope.ReaderBody(vm: NoteEditorViewModel, state: EditorState) {
     val scheme = MaterialTheme.colorScheme
+    // a plain scrolling Column (not a LazyColumn): selection handles can be dragged across every line only here
     SelectionContainer(modifier = Modifier.weight(1f).fillMaxWidth()) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().navigationBarsPadding(),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 32.dp),
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
+                .padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 32.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             if (state.title.isNotBlank()) {
-                item(key = "title") {
-                    Column {
-                        Text(
-                            text = state.title,
-                            style = MaterialTheme.typography.headlineSmall,
-                            color = scheme.onSurface,
-                        )
-                        HorizontalDivider(
-                            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp),
-                            thickness = 1.dp,
-                            color = scheme.outlineVariant,
-                        )
-                    }
-                }
+                Text(
+                    text = state.title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = scheme.onSurface,
+                )
+                HorizontalDivider(
+                    modifier = Modifier.padding(top = 6.dp, bottom = 4.dp),
+                    thickness = 1.dp,
+                    color = scheme.outlineVariant,
+                )
             }
-            itemsIndexed(state.blocks, key = { _, block -> block.id }) { index, block ->
-                if (block.type == BlockType.IMAGE) {
-                    ImageBlock(block = block, onLongPress = {})
-                } else {
-                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                        when (block.type) {
-                            BlockType.BULLET -> MarkerText("•")
-                            BlockType.NUMBERED -> MarkerText(AccountingFormat.digits("${NoteBlocks.numberFor(state.blocks, index)}."))
-                            BlockType.CHECK -> CheckCircle(
-                                checked = block.checked,
-                                onCheckedChange = { vm.setChecked(block.id, it) },
-                                modifier = Modifier.size(40.dp),
+            state.blocks.forEachIndexed { index, block ->
+                key(block.id) {
+                    if (block.type == BlockType.IMAGE) {
+                        ImageBlock(block = block, onLongPress = {})
+                    } else {
+                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                            // markers stay out of the selection, so copied text has no bullets or numbers
+                            DisableSelection {
+                                when (block.type) {
+                                    BlockType.BULLET -> MarkerText("•")
+                                    BlockType.NUMBERED -> MarkerText(AccountingFormat.digits("${NoteBlocks.numberFor(state.blocks, index)}."))
+                                    BlockType.CHECK -> CheckCircle(
+                                        checked = block.checked,
+                                        onCheckedChange = { vm.setChecked(block.id, it) },
+                                        modifier = Modifier.size(40.dp),
+                                    )
+                                    else -> Unit
+                                }
+                            }
+                            Text(
+                                text = styledText(block),
+                                style = alignedStyle(blockBaseStyle(block), block.align),
+                                modifier = Modifier.weight(1f).padding(vertical = 8.dp),
                             )
-                            else -> Unit
                         }
-                        Text(
-                            text = styledText(block),
-                            style = alignedStyle(blockBaseStyle(block), block.align),
-                            modifier = Modifier.weight(1f).padding(vertical = 8.dp),
-                        )
                     }
                 }
             }
