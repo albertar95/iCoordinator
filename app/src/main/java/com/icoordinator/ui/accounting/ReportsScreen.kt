@@ -374,9 +374,9 @@ private fun PeriodSelector(
         Spacer(Modifier.height(8.dp))
         if (state.mode == MODE_MONTH) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // the right-pointing chevron (start side under RTL) moves forward to the next month
-                IconButton(onClick = { onShift(1) }) {
-                    TbIcon(R.drawable.ic_tb_chevron_right, "ماه بعد", tint = scheme.onSurface)
+                // like the calendar: previous on the right (start side under RTL), next on the left
+                IconButton(onClick = { onShift(-1) }) {
+                    TbIcon(R.drawable.ic_tb_chevron_left, "ماه قبل", tint = scheme.onSurface)
                 }
                 Text(
                     text = state.rangeTitle,
@@ -385,8 +385,8 @@ private fun PeriodSelector(
                     modifier = Modifier.weight(1f),
                     textAlign = TextAlign.Center,
                 )
-                IconButton(onClick = { onShift(-1) }) {
-                    TbIcon(R.drawable.ic_tb_chevron_left, "ماه قبل", tint = scheme.onSurface)
+                IconButton(onClick = { onShift(1) }) {
+                    TbIcon(R.drawable.ic_tb_chevron_right, "ماه بعد", tint = scheme.onSurface)
                 }
             }
         } else {
