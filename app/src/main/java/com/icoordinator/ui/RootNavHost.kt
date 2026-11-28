@@ -55,7 +55,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -254,6 +256,23 @@ private fun HomeMenu(
             colors = if (dark) listOf(Color(0xFF475569), Color(0xFF1E293B)) else listOf(Color(0xFF64748B), Color(0xFF334155)),
             onClick = onOpenVault,
         )
+        val context = LocalContext.current
+        val versionName = remember {
+            try {
+                context.packageManager.getPackageInfo(context.packageName, 0).versionName
+            } catch (e: Exception) {
+                null
+            }
+        }
+        if (versionName != null) {
+            Text(
+                text = "نسخه‌ی $versionName",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp),
+            )
+        }
     }
 }
 

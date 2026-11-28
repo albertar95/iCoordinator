@@ -22,9 +22,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -35,8 +39,13 @@ import com.icoordinator.ICoordinatorApp
 import com.icoordinator.R
 import com.icoordinator.data.entity.WeeklyReportEntity
 import com.icoordinator.domain.ReportScore
+import com.icoordinator.domain.WeekUtils
 import com.icoordinator.domain.WeeklyReport
+import android.widget.Toast
+import com.icoordinator.ui.components.ConfirmDeleteDialog
+import com.icoordinator.ui.components.DeleteIconButton
 import com.icoordinator.ui.components.EmptyState
+import com.icoordinator.ui.components.ShamsiDatePickerDialog
 import com.icoordinator.ui.components.IconCircle
 import com.icoordinator.ui.components.PageHeader
 import com.icoordinator.ui.components.PillButton
@@ -56,6 +65,36 @@ fun ReportScreen() {
     val selected by vm.selected.collectAsStateWithLifecycle()
     // Hero shows the selected report, or the latest saved one (first in the list) when none is selected.
     val heroReport = selected ?: reports.firstOrNull()
+    val context = LocalContext.current
+    var showPicker by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf<WeeklyReportEntity?>(null) }
+
+    if (showPicker) {
+        // هر روزی از هفته‌ی مورد نظر را انتخاب کن؛ گزارش کل آن هفته (شنبه تا جمعه) ساخته می‌شود
+        ShamsiDatePickerDialog(
+            initial = LocalDate.now().minusWeeks(1),
+            onDismiss = { showPicker = false },
+            onPick = { date ->
+                showPicker = false
+                if (WeekUtils.weekStartOf(date).isAfter(WeekUtils.weekStartOf(LocalDate.now()))) {
+                    Toast.makeText(context, "برای هفته‌ی آینده نمی‌شود گزارش ساخت", Toast.LENGTH_SHORT).show()
+                } else {
+                    vm.generateForDate(date)
+                }
+            },
+        )
+    }
+
+    deleting?.let { report ->
+        ConfirmDeleteDialog(
+            itemName = "گزارش " + WeeklyReport.rangeLabel(LocalDate.ofEpochDay(report.weekStart)),
+            onConfirm = {
+                deleting = null
+                vm.delete(report)
+            },
+            onDismiss = { deleting = null },
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -77,9 +116,24 @@ fun ReportScreen() {
                     icon = R.drawable.ic_tb_plus,
                 )
             }
+            item {
+                PillButton(
+                    text = "ساخت گزارش برای بازه‌ی دیگر",
+                    onClick = { showPicker = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    icon = R.drawable.ic_tb_calendar,
+                    outlined = true,
+                )
+            }
 
             heroReport?.let { report ->
-                item { ReportCard(report) }
+                item {
+                    ReportCard(
+                        report = report,
+                        onRegenerate = { vm.regenerate(report) },
+                        onDelete = { deleting = report },
+                    )
+                }
             }
 
             item {
@@ -130,7 +184,7 @@ fun ReportScreen() {
 }
 
 @Composable
-private fun ReportCard(report: WeeklyReportEntity) {
+private fun ReportCard(report: WeeklyReportEntity, onRegenerate: () -> Unit, onDelete: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -138,26 +192,41 @@ private fun ReportCard(report: WeeklyReportEntity) {
         color = scheme.surface,
         border = BorderStroke(1.dp, scheme.outlineVariant),
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            ScoreRing(percent = report.percent, size = 128.dp)
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = WeeklyReport.rangeLabel(LocalDate.ofEpochDay(report.weekStart)),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = scheme.onSurfaceVariant,
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                ScoreRing(percent = report.percent, size = 128.dp)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = WeeklyReport.rangeLabel(LocalDate.ofEpochDay(report.weekStart)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    ScoreLabelPill(label = "نمره: ${scoreLabel(report)}", percent = report.percent)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = report.text,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = scheme.onSurface,
+                    )
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                PillButton(
+                    text = "ساخت مجدد",
+                    onClick = onRegenerate,
+                    modifier = Modifier.weight(1f),
+                    icon = R.drawable.ic_tb_refresh,
+                    outlined = true,
                 )
-                Spacer(Modifier.height(8.dp))
-                ScoreLabelPill(label = "نمره: ${scoreLabel(report)}", percent = report.percent)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = report.text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = scheme.onSurface,
-                )
+                DeleteIconButton(onClick = onDelete, contentDescription = "حذف گزارش")
             }
         }
     }

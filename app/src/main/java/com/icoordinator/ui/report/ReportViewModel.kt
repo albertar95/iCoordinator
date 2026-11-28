@@ -29,6 +29,27 @@ class ReportViewModel(private val repo: ReportRepository) : ViewModel() {
         }
     }
 
+    /** گزارش هفته‌ای را می‌سازد که [date] در آن است (شنبه تا جمعه)؛ برای هفته‌های گذشته هم کار می‌کند. */
+    fun generateForDate(date: LocalDate) {
+        viewModelScope.launch {
+            _selected.value = repo.generate(WeekUtils.weekStartOf(date))
+        }
+    }
+
+    /** گزارش همان هفته را از روی اطلاعات فعلی دوباره می‌سازد و جایگزین می‌کند. */
+    fun regenerate(report: WeeklyReportEntity) {
+        viewModelScope.launch {
+            _selected.value = repo.generate(LocalDate.ofEpochDay(report.weekStart))
+        }
+    }
+
+    fun delete(report: WeeklyReportEntity) {
+        viewModelScope.launch {
+            repo.delete(report.weekStart)
+            if (_selected.value?.weekStart == report.weekStart) _selected.value = null
+        }
+    }
+
     fun select(report: WeeklyReportEntity) {
         _selected.value = report
     }

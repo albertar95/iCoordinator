@@ -20,6 +20,8 @@ class ReportRepository(
 
     fun observeReports(): Flow<List<WeeklyReportEntity>> = reports.observeAll()
 
+    suspend fun delete(weekStart: Long) = reports.delete(weekStart)
+
     /** گزارش هفته‌ی داده‌شده را از روی تسک‌ها و روتین‌های آن هفته می‌سازد و ذخیره می‌کند. */
     suspend fun generate(weekStart: LocalDate): WeeklyReportEntity {
         val startDay = weekStart.toEpochDay()

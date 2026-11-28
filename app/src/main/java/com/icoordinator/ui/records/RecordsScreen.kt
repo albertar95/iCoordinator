@@ -39,6 +39,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.icoordinator.R
 import com.icoordinator.accounting.AccountingFormat
+import com.icoordinator.domain.PersianCalendar
 import com.icoordinator.personal.RecordEntity
 import com.icoordinator.personal.RecordMath
 import com.icoordinator.ui.components.AppTextField
@@ -47,6 +48,8 @@ import com.icoordinator.ui.components.EmptyState
 import com.icoordinator.ui.components.PageHeader
 import com.icoordinator.ui.components.ProgressLine
 import com.icoordinator.ui.components.TbIcon
+import java.time.Instant
+import java.time.ZoneId
 
 @Composable
 fun RecordsScreen(onExit: () -> Unit) {
@@ -202,7 +205,7 @@ private fun RecordCard(record: RecordEntity, onClick: () -> Unit, onEdit: () -> 
                 if (previous != null) {
                     Spacer(Modifier.height(2.dp))
                     Text(
-                        text = "قبلی: " + RecordMath.format(previous),
+                        text = "قبلی: " + RecordMath.format(previous) + " (آخرین تغییر: " + changeDateText(record.updatedAt) + ")",
                         style = MaterialTheme.typography.bodyMedium,
                         color = scheme.onSurfaceVariant,
                     )
@@ -210,6 +213,12 @@ private fun RecordCard(record: RecordEntity, onClick: () -> Unit, onEdit: () -> 
             }
         }
     }
+}
+
+/** تاریخ شمسی (با ارقام فارسی) از زمان ذخیره‌شده؛ updatedAt فقط با تغییر مقدار فعلی عوض می‌شود. */
+private fun changeDateText(millis: Long): String {
+    val date = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
+    return AccountingFormat.digits(PersianCalendar.format(date))
 }
 
 /**

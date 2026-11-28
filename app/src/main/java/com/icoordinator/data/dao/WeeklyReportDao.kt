@@ -15,4 +15,7 @@ interface WeeklyReportDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(report: WeeklyReportEntity)
+
+    @Query("DELETE FROM weekly_reports WHERE weekStart = :weekStart")
+    suspend fun delete(weekStart: Long)
 }
